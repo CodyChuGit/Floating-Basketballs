@@ -7,5 +7,8 @@ View demo here:
 https://floatingbballdemo.netlify.app
 
 
-Special thanks 
-
+Special Thanks to the 3d asset creator:
+Author: Lassi Kaukonen (https://sketchfab.com/thesidekick)
+License: CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+Source: https://sketchfab.com/3d-models/basketball-8d17cb0964334a6cbe4b0e293c238956
+Title: Basketball
