@@ -1,4 +1,4 @@
-Floating BasketBalls
+React Floating BasketBalls Component
 
 This is a demo using three.js and react to build a interactive 3d website rendering 3d objects flloating in space.
 
