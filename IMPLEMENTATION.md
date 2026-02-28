@@ -42,7 +42,7 @@ The `<Canvas>` setup utilizes strict WebGL parameters to optimize memory:
     - `ambientLight` (Intensity: `0.01` high-perf, `0.8` compat).
     - `directionalLight` (The "sun", `[50,100,50]`). Casts soft shadows on a `1024x1024` map if high-perf.
     - Two `pointLight`s for back-fill and rim lighting.
-- **Visual Sun:** A sphere mesh with an `emissive` material (`intensity: 17`). In high-perf, it is overlaid with a `THREE.Sprite` using `AdditiveBlending` and a dynamically generated Canvas2D radial gradient texture (`glowTexture`) to simulate volumetric scattering without loading external image assets.
+- **Visual Sun:** A sphere mesh with an `emissive` material (`intensity: 17`). In high-perf, it is overlaid with a `<Billboard>` containing a custom `THREE.ShaderMaterial`. This procedural shader calculates a mathematically perfect radial gradient in 32-bit float precision per-pixel on the GPU, avoiding the color banding and dithering artifacts inherent to 8-bit Canvas Textures. It also injects a microscopic high-frequency noise dither (`fract(sin(...) * ...)`) to guarantee flawless visual falloff on consumer monitors, specifically eliminating the "stippling" dots visible on pitch-black backgrounds.
 - **Postprocessing:** `EffectComposer` is wrapped in an `if (!isLowPower)`. The composer uses `multisampling={4}` and `disableNormalPass` to save memory. Effects included: `Bloom` (threshold 1.2), `Noise` (opacity 0.02), `Vignette` (darkness adjusts dynamically based on `isDarkMode`).
 
 ### 4.1 Recreating the Basketballs (InstancedMesh)
