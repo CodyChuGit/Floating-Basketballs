@@ -81,7 +81,7 @@ function Loader({ isDarkMode }) {
  * @param {boolean} isPrimitive — Whether wireframe diagnostic view is active.
  * @param {function} setIsPrimitive — State setter for toggling wireframe view.
  */
-function Basketballs({ count = 80, lowPower = false, isPrimitive, setIsPrimitive }) {
+function Basketballs({ count = 80, lowPower = false, isPrimitive, setIsPrimitive, isDarkMode }) {
   const { nodes, materials } = useGLTF('/Ball.gltf')
   const { gl } = useThree()
   const meshRef = useRef()
@@ -167,7 +167,7 @@ function Basketballs({ count = 80, lowPower = false, isPrimitive, setIsPrimitive
     const r = centeredGeo.boundingSphere.radius
     return new THREE.SphereGeometry(r, 12, 12)
   }, [centeredGeo])
-  const primitiveMat = useMemo(() => new THREE.MeshBasicMaterial({ color: '#ffffff', wireframe: true, transparent: true, opacity: 0.8 }), [])
+  const primitiveMat = useMemo(() => new THREE.MeshBasicMaterial({ color: isDarkMode ? '#ffffff' : '#000000', wireframe: true, transparent: true, opacity: 0.8 }), [isDarkMode])
 
   return (
     <>
@@ -384,6 +384,7 @@ function App() {
             lowPower={isLowPower}
             isPrimitive={isPrimitive}
             setIsPrimitive={setIsPrimitive}
+            isDarkMode={isDarkMode}
           />
           {/* HDR Environment Map — provides realistic reflections on ball surfaces */}
           {!isLowPower && <Environment preset="city" blur={0.5} />}
