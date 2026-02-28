@@ -14,8 +14,8 @@ import { PhysicsSimulator } from './physics.js'
 THREE.Cache.enabled = true // reuse decoded textures across mounts
 
 // Effects that can be cycled via "O" key (order matters)
-const EFFECT_NAMES = ['Environment', 'Noise', 'Shadows', 'Vignette', 'Bloom']
-const ALL_EFFECTS_ON = { Environment: true, Noise: true, Shadows: true, Vignette: true, Bloom: true }
+const EFFECT_NAMES = ['Vignette', 'Shadows', 'Bloom', 'Noise', 'Environment']
+const ALL_EFFECTS_ON = { Vignette: true, Shadows: true, Bloom: true, Noise: true, Environment: true }
 
 // --- Loader ---
 // Bridges the native HTML #preloader (visible before JS loads) with React's
@@ -37,7 +37,7 @@ function Loader() {
 // --- Basketballs ---
 // Renders N balls via InstancedMesh. Physics drives positions each frame.
 // Two meshes exist in parallel: textured (default) and wireframe (diagnostic "P" key).
-function Basketballs({ count = 80, isPrimitive, isDarkMode }) {
+function Basketballs({ count = 80, isPrimitive, isDarkMode, isLowPower }) {
   const { nodes, materials } = useGLTF('/Ball.gltf')
   const { gl } = useThree()
   const meshRef = useRef()
@@ -83,7 +83,8 @@ function Basketballs({ count = 80, isPrimitive, isDarkMode }) {
   })
 
   // Wireframe diagnostic sphere (matches collision radius exactly)
-  const primGeo = useMemo(() => new THREE.SphereGeometry(radius, 12, 12), [radius])
+  const wireSegs = isLowPower ? 12 : 24
+  const primGeo = useMemo(() => new THREE.SphereGeometry(radius, wireSegs, wireSegs), [radius, wireSegs])
   const primMat = useMemo(() => new THREE.MeshBasicMaterial({
     color: isDarkMode ? '#fff' : '#000', wireframe: true, transparent: true, opacity: 0.8,
   }), [isDarkMode])
@@ -132,6 +133,7 @@ function App() {
     return true
   })
   const [themeOverride, setThemeOverride] = useState(false)
+  const envIntensity = isDarkMode ? 0.06 : 0.4
 
   // Dark Mode scales illumination to 2.5x to compensate for lack of Environment map
   const modeMult = isDarkMode ? 2.5 : 1.0
@@ -236,6 +238,7 @@ function App() {
 
       {/* Three.js Canvas — DPR capped to 1.0 on Safari (Retina perf), 1.5 elsewhere */}
       <Canvas
+        style={isLowPower ? { filter: 'saturate(0.8)' } : undefined}
         dpr={[1, isSafari ? 1.0 : 1.5]}
         shadows={effects.Shadows ? 'soft' : false}
         camera={{ position: [0, 20, 90], fov: 45 }}
@@ -247,11 +250,11 @@ function App() {
         <color attach="background" args={[bg]} />
 
         {/* Ambient fill light — boosted in Dark Mode to replace Environment bounce */}
-        <ambientLight intensity={(isLowPower ? 0.8 : 0.005) * modeMult} />
-        <directionalLight position={[50, 100, 50]} intensity={(isLowPower ? 0.4 : 1.0) * modeMult}
+        <ambientLight intensity={(isLowPower ? (isDarkMode ? 0.10 : 0.55) : 0.005) * modeMult} />
+        <directionalLight position={[50, 100, 50]} intensity={(isLowPower ? (isDarkMode ? 1.30 : 2.70) : 1.0) * modeMult}
           castShadow={!isLowPower && effects.Shadows}
-          shadow-mapSize={[2048, 2048]} shadow-camera-left={-55} shadow-camera-right={55}
-          shadow-camera-top={55} shadow-camera-bottom={-55} shadow-bias={-0.0005} />
+          shadow-mapSize={[4096, 4096]} shadow-camera-left={-55} shadow-camera-right={55}
+          shadow-camera-top={55} shadow-camera-bottom={-55} shadow-bias={-0.002} />
 
         {/* Sun mesh + additive glow sprite */}
         <group position={[50, 100, 50]}>
@@ -280,16 +283,16 @@ function App() {
           rotateSpeed={0.24} autoRotate autoRotateSpeed={-0.51} minDistance={35} maxDistance={63} />
 
         <Suspense fallback={null}>
-          <Basketballs count={isLowPower ? 40 : 80} isPrimitive={isPrimitive} isDarkMode={isDarkMode} />
-          {/* Environment only enabled in Light Mode; Dark Mode uses 2.5x light multiplier instead */}
-          {!isLowPower && !isDarkMode && effects.Environment && <Environment preset="city" blur={0.5} />}
+          <Basketballs count={isLowPower ? 40 : 80} isPrimitive={isPrimitive} isDarkMode={isDarkMode} isLowPower={isLowPower} />
+          {/* Environment now enabled in both Light and Dark Mode; with user-controlled intensity */}
+          {!isLowPower && effects.Environment && <Environment preset="city" blur={0.5} environmentIntensity={envIntensity} />}
         </Suspense>
 
         {/* Post-processing — only in high-perf mode, each effect individually toggleable */}
         {!isLowPower && (effects.Bloom || effects.Noise || effects.Vignette) && (
           <EffectComposer disableNormalPass multisampling={4}>
             {effects.Bloom && <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.85} radius={0.5} />}
-            {effects.Noise && <Noise opacity={0.03} />}
+            {effects.Noise && <Noise opacity={0.022} />}
             {effects.Vignette && <Vignette eskil={false} offset={0.35} darkness={isDarkMode ? 0.65 : 0.38} />}
           </EffectComposer>
         )}

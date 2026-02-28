@@ -23,7 +23,7 @@ An interactive 3D basketball simulation built with React, Three.js, and a custom
 | **P** | Toggle wireframe diagnostic view |
 | **L** | Toggle light/dark mode (overrides OS) |
 | **M** | Toggle High Performance ↔ High Compatibility mode |
-| **O** | Cycle through disabling effects one by one (Bloom → Noise → Vignette → Shadows → Environment → all back on) |
+| **O** | Cycle through disabling effects one by one (Vignette → Shadows → Bloom → Noise → Environment → all back on) |
 
 ## ⚡ Architecture
 
