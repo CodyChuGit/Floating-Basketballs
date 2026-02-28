@@ -24,6 +24,9 @@ import { Bloom, Noise, Vignette, EffectComposer } from '@react-three/postprocess
 import * as THREE from 'three'
 import { PhysicsSimulator } from './physics.js'
 
+// Enable Three.js global asset caching to reuse buffers
+THREE.Cache.enabled = true
+
 
 // ==========================================================================
 // Loader — Bridges the native HTML preloader with React's asset loading
@@ -128,7 +131,11 @@ function Basketballs({ count = 80, lowPower = false, isPrimitive, setIsPrimitive
     return geo
   }, [nodes])
 
-  // Extract the actual collision radius from the centered geometry
+  // Manually dispose of clones when centeredGeo changes or unmounts
+  useEffect(() => {
+    return () => centeredGeo.dispose()
+  }, [centeredGeo])
+
   const actualRadius = centeredGeo.boundingSphere.radius
 
   // -----------------------------------------------------------------------
@@ -163,7 +170,23 @@ function Basketballs({ count = 80, lowPower = false, isPrimitive, setIsPrimitive
     const r = centeredGeo.boundingSphere.radius
     return new THREE.SphereGeometry(r, 12, 12)
   }, [centeredGeo])
-  const primitiveMat = useMemo(() => new THREE.MeshBasicMaterial({ color: isDarkMode ? '#ffffff' : '#000000', wireframe: true, transparent: true, opacity: 0.8 }), [isDarkMode])
+
+  const primitiveMat = useMemo(() => {
+    return new THREE.MeshBasicMaterial({
+      color: isDarkMode ? '#ffffff' : '#000000',
+      wireframe: true,
+      transparent: true,
+      opacity: 0.8
+    })
+  }, [isDarkMode])
+
+  // Ensure diagnostic objects are disposed from GPU memory
+  useEffect(() => {
+    return () => {
+      primitiveGeo.dispose()
+      primitiveMat.dispose()
+    }
+  }, [primitiveGeo, primitiveMat])
 
   return (
     <>
@@ -264,6 +287,11 @@ function App() {
     return new THREE.CanvasTexture(canvas)
   }, [])
 
+  // Explicitly dispose of generated glow texture on unmount
+  useEffect(() => {
+    return () => glowTexture.dispose()
+  }, [glowTexture])
+
   // =========================================================================
   // RENDER
   // =========================================================================
@@ -303,7 +331,17 @@ function App() {
         camera={{ position: [0, 20, 90], fov: 45 }}
         gl={{
           antialias: false,
-          powerPreference: isLowPower ? "low-power" : "high-performance"
+          powerPreference: isLowPower ? "low-power" : "high-performance",
+          preserveDrawingBuffer: false,
+          stencil: false,
+          depth: true
+        }}
+        onCreated={({ gl }) => {
+          // Monitor rendering stats and GPU info
+          console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+          console.log("🎨 Renderer Initialized")
+          console.log("Memory info:", gl.info.memory)
+          console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         }}
       >
         {/* Canvas clear color — matches the HTML background for seamlessness */}
@@ -327,17 +365,20 @@ function App() {
           shadow-bias={-0.001}
         />
 
-        {/* Visual Sun and Glow Sprite — positioned at the directional light source.
-             Uses meshBasicMaterial (not Standard) to avoid per-vertex PBR shading
-             discontinuities that get amplified by Bloom into visible green dots.
-             High segment count (64) ensures perfectly smooth bloom edges. */}
+        {/* Visual Sun and Glow Sprite — positioned at the directional light source */}
         <group position={[50, 100, 50]}>
           <mesh ref={sunRef}>
-            <sphereGeometry args={[5, isLowPower ? 8 : 64, isLowPower ? 8 : 64]} />
-            <meshBasicMaterial
-              color="#fffaf0"
-              toneMapped={false}
-            />
+            <sphereGeometry args={[5, isLowPower ? 8 : 16, isLowPower ? 8 : 16]} />
+            {isLowPower ? (
+              <meshBasicMaterial color="#ffffff" />
+            ) : (
+              <meshStandardMaterial
+                color="#ffffff"
+                emissive="#fff9e6"
+                emissiveIntensity={17}
+                toneMapped={false}
+              />
+            )}
           </mesh>
           {/* Additive-blended glow sprite — creates a soft halo around the sun */}
           {!isLowPower && (
@@ -386,7 +427,7 @@ function App() {
         {/* ----- Post-Processing Pipeline ----- */}
         {/* Only active in High Performance mode; stripped entirely in Compat mode */}
         {!isLowPower && (
-          <EffectComposer disableNormalPass>
+          <EffectComposer disableNormalPass multisampling={0}>
             {/* Bloom: Soft glow on bright highlights (sun, specular reflections) */}
             <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.85} radius={0.5} />
             {/* Noise: Subtle film grain for organic, non-digital feel */}
