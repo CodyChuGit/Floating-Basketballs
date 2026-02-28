@@ -80,7 +80,7 @@ function Loader() {
  * @param {boolean} isPrimitive — Whether wireframe diagnostic view is active.
  * @param {function} setIsPrimitive — State setter for toggling wireframe view.
  */
-function Basketballs({ count = 80, lowPower = false, isPrimitive, setIsPrimitive, isDarkMode }) {
+function Basketballs({ count = 80, lowPower = false, isPrimitive, isDarkMode }) {
   const { nodes, materials } = useGLTF('/Ball.gltf')
   const { gl } = useThree()
   const meshRef = useRef()
@@ -102,19 +102,6 @@ function Basketballs({ count = 80, lowPower = false, isPrimitive, setIsPrimitive
       if (material.roughnessMap) material.roughnessMap.anisotropy = gl.capabilities.getMaxAnisotropy()
     })
   }, [materials, gl])
-
-  // -----------------------------------------------------------------------
-  // Diagnostic Mode Toggle: Press "P" to switch between textured and wireframe
-  // -----------------------------------------------------------------------
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key.toLowerCase() === 'p') {
-        setIsPrimitive(prev => !prev)
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [setIsPrimitive])
 
   // -----------------------------------------------------------------------
   // Geometry Centering
@@ -254,7 +241,12 @@ function App() {
     return true
   })
 
+  // Track whether the user has manually overridden the theme via "L" key.
+  // When overridden, we stop listening to OS-level theme changes.
+  const [themeOverridden, setThemeOverridden] = useState(false)
+
   useEffect(() => {
+    if (themeOverridden) return // User has manually set the theme, ignore OS changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handleChange = (e) => setIsDarkMode(e.matches)
     if (mediaQuery.addEventListener) {
@@ -264,6 +256,28 @@ function App() {
       mediaQuery.addListener(handleChange)
       return () => mediaQuery.removeListener(handleChange)
     }
+  }, [themeOverridden])
+
+  // -----------------------------------------------------------------------
+  // Keyboard Shortcuts (App-level)
+  // "L" — Toggle Light/Dark mode (manual override)
+  // "M" — Cycle display modes (High Performance ↔ High Compatibility)
+  // "P" — Toggle wireframe diagnostic view
+  // -----------------------------------------------------------------------
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const key = e.key.toLowerCase()
+      if (key === 'l') {
+        setIsDarkMode(prev => !prev)
+        setThemeOverridden(true)
+      } else if (key === 'm') {
+        setIsLowPower(prev => !prev)
+      } else if (key === 'p') {
+        setIsPrimitive(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
   // -----------------------------------------------------------------------
@@ -417,7 +431,6 @@ function App() {
             count={isLowPower ? 40 : 80}
             lowPower={isLowPower}
             isPrimitive={isPrimitive}
-            setIsPrimitive={setIsPrimitive}
             isDarkMode={isDarkMode}
           />
           {/* HDR Environment Map — provides realistic reflections on ball surfaces */}
@@ -438,10 +451,11 @@ function App() {
         )}
       </Canvas>
 
-      {/* ----- Diagnostic Mode Label (visible only when wireframe is active) ----- */}
+      {/* ----- Diagnostic Mode Label & Keyboard Shortcuts ----- */}
       {isPrimitive && (
-        <div style={{ position: 'absolute', bottom: 20, right: 20, color: isDarkMode ? 'white' : 'black', opacity: 0.3, pointerEvents: 'none', fontSize: '10px', zIndex: 10 }}>
-          {isLowPower ? 'High Compatibility Mode' : 'High Performance Mode'}
+        <div style={{ position: 'absolute', bottom: 20, right: 20, color: isDarkMode ? 'white' : 'black', opacity: 0.3, pointerEvents: 'none', fontSize: '10px', zIndex: 10, textAlign: 'right', lineHeight: 1.6 }}>
+          {isLowPower ? 'High Compatibility Mode' : 'High Performance Mode'}<br />
+          [L] Theme · [M] Mode · [P] Wireframe
         </div>
       )}
     </div>
