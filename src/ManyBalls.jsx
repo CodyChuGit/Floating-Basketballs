@@ -26,41 +26,37 @@ import { PhysicsSimulator } from './physics.js'
 
 
 // ==========================================================================
-// Loader — Full-screen loading overlay with animated bouncing basketball
+// Loader — Bridges the native HTML preloader with React's asset loading
 // ==========================================================================
 
 /**
- * Displays a full-screen loading overlay while 3D assets are being downloaded.
- * Uses @react-three/drei's `useProgress` to track asset loading completion.
- * Once 100% loaded, the overlay fades out over 1 second and then unmounts.
+ * This component does NOT render any visible UI of its own. Instead, it
+ * monitors Three.js asset loading progress via useProgress() and controls
+ * the native HTML preloader element (#preloader) that is already visible
+ * in index.html from the moment the page loads — zero JS dependency.
  *
- * @param {boolean} isDarkMode — Controls the overlay background color.
+ * Once all 3D assets are loaded (progress >= 100%), it fades out the
+ * HTML preloader and removes it from the DOM after the transition completes.
  */
-function Loader({ isDarkMode }) {
+function Loader() {
   const { progress } = useProgress()
-  const [isFading, setIsFading] = useState(false)
-  const [isHidden, setIsHidden] = useState(false)
 
   useEffect(() => {
-    if (progress >= 100 && !isFading) {
-      // Begin the fade-out transition immediately
-      const fade = setTimeout(() => setIsFading(true), 0)
-      // Unmount the overlay after the CSS transition completes (1 second)
-      const hide = setTimeout(() => setIsHidden(true), 1000)
-      return () => { clearTimeout(fade); clearTimeout(hide) }
+    if (progress >= 100) {
+      const preloader = document.getElementById('preloader')
+      if (!preloader) return
+
+      // Add the CSS fade-out class (1s transition defined in index.html)
+      preloader.classList.add('fade-out')
+
+      // Remove the element from the DOM after the transition finishes
+      const cleanup = setTimeout(() => preloader.remove(), 1200)
+      return () => clearTimeout(cleanup)
     }
-  }, [progress, isFading])
+  }, [progress])
 
-  // Once fully hidden, return null to remove from DOM entirely
-  if (isHidden) return null
-
-  return (
-    <div className={`loader-overlay ${isFading ? 'overlay-hidden' : 'overlay-visible'}`} style={{ backgroundColor: isDarkMode ? '#050505' : '#ffffff' }}>
-      <div className="loader-container">
-        <img src="/loading-ball.webp" alt="Loading..." className="bouncing-ball" />
-      </div>
-    </div>
-  )
+  // This component renders nothing — the preloader lives in index.html
+  return null
 }
 
 
@@ -275,7 +271,7 @@ function App() {
     <div style={{ width: '100vw', height: '100vh', background: isDarkMode ? '#020202' : '#f0f0f0', position: 'relative', overflow: 'hidden' }}>
 
       {/* Loading Screen — Fades out once all 3D assets are downloaded */}
-      <Loader isDarkMode={isDarkMode} />
+      <Loader />
 
       {/* ----------------------------------------------------------------- */}
       {/* iOS Safari Edge Fades                                             */}

@@ -1,16 +1,18 @@
 /* ============================================================================
- * App.css — Global Styles and Loading Animation
+ * App.css — Global Styles
  * ============================================================================
  *
  * This stylesheet provides:
  *   1. Light/Dark mode background theming (via CSS media queries)
- *   2. Loading screen overlay and fade-out transitions
- *   3. Bouncing ball animation for the loading indicator
+ *   2. Canvas full-viewport sizing
  *
  * The background colors here MUST match the values used in:
  *   - index.html <meta name="theme-color"> tags
+ *   - index.html inline <style> block and #preloader
  *   - ManyBalls.jsx Canvas <color> and container div
- *   - index.html inline <style> block
+ *
+ * NOTE: Loading animation styles (bounce, overlay, etc.) are now inlined
+ * in index.html so they render before any JS loads.
  *
  * ============================================================================ */
 
@@ -45,69 +47,4 @@ body {
 
 canvas {
   height: 100vh !important;
-}
-
-
-/* ------ Loading Ball Animation ------ */
-/* A smooth, infinite vertical bounce used by the loading indicator.
-   Uses CSS transforms for GPU-accelerated rendering (no layout thrashing). */
-
-@keyframes bounce {
-
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-
-  50% {
-    transform: translateY(-30px);
-  }
-}
-
-.bouncing-ball {
-  width: 100px;
-  height: 100px;
-  animation: bounce 1.2s ease-in-out infinite;
-  filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.5));
-  will-change: transform;
-}
-
-
-/* ------ Loader Overlay ------ */
-/* Full-screen overlay that sits above the 3D canvas while assets load.
-   Transitions to transparent over 1.5 seconds once loading completes. */
-
-.loader-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  pointer-events: none;
-  transition: opacity 1.5s ease-out;
-}
-
-.loader-overlay.overlay-visible {
-  opacity: 1;
-}
-
-.loader-overlay.overlay-hidden {
-  opacity: 0;
-}
-
-
-/* ------ Loader Content Container ------ */
-/* Centers the bouncing ball vertically and horizontally within the overlay. */
-
-.loader-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  transition: opacity 1s ease-out;
 }

@@ -11,6 +11,10 @@
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#f0f0f0" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#020202" media="(prefers-color-scheme: dark)" />
+
+  <!-- Preload the loading ball image so it renders instantly with the HTML -->
+  <link rel="preload" href="/loading-ball.webp" as="image" type="image/webp" />
+
   <style>
     :root {
       color-scheme: light dark;
@@ -29,6 +33,51 @@
       body {
         background: #020202;
       }
+    }
+
+    /* ---- Inline Loader (renders BEFORE JavaScript loads) ---- */
+    #preloader {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      background: #f0f0f0;
+      transition: opacity 1s ease-out;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      #preloader {
+        background: #020202;
+      }
+    }
+
+    #preloader.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    @keyframes bounce {
+
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-30px);
+      }
+    }
+
+    #preloader img {
+      width: 100px;
+      height: 100px;
+      animation: bounce 1.2s ease-in-out infinite;
+      filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.5));
     }
   </style>
 
@@ -50,6 +99,11 @@
 </head>
 
 <body>
+  <!-- Inline preloader: visible INSTANTLY, before any JS loads -->
+  <div id="preloader">
+    <img src="/loading-ball.webp" alt="Loading..." />
+  </div>
+
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
 </body>
