@@ -6,7 +6,7 @@ import { Bloom, Noise, Vignette, EffectComposer } from '@react-three/postprocess
 import * as THREE from 'three'
 import { PhysicsSimulator } from './physics.js'
 
-function Loader() {
+function Loader({ isDarkMode }) {
   const { progress } = useProgress()
   const [isFading, setIsFading] = useState(false)
   const [isHidden, setIsHidden] = useState(false)
@@ -22,7 +22,7 @@ function Loader() {
   if (isHidden) return null
 
   return (
-    <div className={`loader-overlay ${isFading ? 'overlay-hidden' : 'overlay-visible'}`}>
+    <div className={`loader-overlay ${isFading ? 'overlay-hidden' : 'overlay-visible'}`} style={{ backgroundColor: isDarkMode ? '#050505' : '#ffffff' }}>
       <div className="loader-container">
         <img src="/loading-ball.png" alt="Loading..." className="bouncing-ball" />
       </div>
@@ -100,6 +100,25 @@ function App() {
     return window.location.search.includes('compat') || !window.WebGLRenderingContext
   })
 
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches
+    }
+    return true
+  })
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleChange = (e) => setIsDarkMode(e.matches)
+    if (mediaQuery.addEventListener) {
+      mediaQuery.addEventListener('change', handleChange)
+      return () => mediaQuery.removeEventListener('change', handleChange)
+    } else {
+      mediaQuery.addListener(handleChange)
+      return () => mediaQuery.removeListener(handleChange)
+    }
+  }, [])
+
   // Procedural gradient glow for the sun
   const glowTexture = useMemo(() => {
     const canvas = document.createElement('canvas')
@@ -117,17 +136,18 @@ function App() {
   }, [])
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#050505', position: 'relative' }}>
-      <Loader />
+    <div style={{ width: '100vw', height: '100vh', background: isDarkMode ? '#050505' : '#ffffff', position: 'relative', overflow: 'hidden' }}>
+      <Loader isDarkMode={isDarkMode} />
       <Canvas
+        dpr={[1, 1.5]}
         shadows={!isLowPower}
         camera={{ position: [0, 20, 90], fov: 45 }}
         gl={{
-          antialias: !isLowPower,
+          antialias: false,
           powerPreference: isLowPower ? "low-power" : "high-performance"
         }}
       >
-        <color attach="background" args={['#020202']} />
+        <color attach="background" args={[isDarkMode ? '#020202' : '#f0f0f0']} />
 
         <ambientLight intensity={isLowPower ? 0.8 : 0.01} />
         <directionalLight
@@ -196,7 +216,7 @@ function App() {
           </EffectComposer>
         )}
       </Canvas>
-      <div style={{ position: 'absolute', bottom: 20, right: 20, color: 'white', opacity: 0.3, pointerEvents: 'none', fontSize: '10px' }}>
+      <div style={{ position: 'absolute', bottom: 20, right: 20, color: isDarkMode ? 'white' : 'black', opacity: 0.3, pointerEvents: 'none', fontSize: '10px' }}>
         {isLowPower ? 'High Compatibility Mode' : 'High Performance Mode'}
       </div>
     </div>
