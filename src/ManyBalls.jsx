@@ -31,18 +31,19 @@ function Loader({ isDarkMode }) {
 }
 
 
-function Basketballs({ count = 80, lowPower = false }) {
+function Basketballs({ count = 80, lowPower = false, isPrimitive, setIsPrimitive }) {
   const { nodes, materials } = useGLTF('/Ball.gltf')
   const { gl } = useThree()
   const meshRef = useRef()
   const primRef = useRef()
 
-  const [isPrimitive, setIsPrimitive] = useState(lowPower)
-
   useEffect(() => {
     Object.values(materials).forEach(material => {
       if (material.map) material.map.anisotropy = gl.capabilities.getMaxAnisotropy()
-      if (material.normalMap) material.normalMap.anisotropy = gl.capabilities.getMaxAnisotropy()
+      if (material.normalMap) {
+        material.normalMap.anisotropy = gl.capabilities.getMaxAnisotropy()
+        material.normalScale.set(0.5, 0.5)
+      }
       if (material.roughnessMap) material.roughnessMap.anisotropy = gl.capabilities.getMaxAnisotropy()
     })
   }, [materials, gl])
@@ -55,7 +56,7 @@ function Basketballs({ count = 80, lowPower = false }) {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [setIsPrimitive])
 
   // Clone and CENTER the geometry at origin so physics position == visual center
   const centeredGeo = useMemo(() => {
@@ -105,9 +106,15 @@ function App() {
   const sunRef = useRef()
 
   const [isLowPower, setIsLowPower] = useState(() => {
-    // Basic detection for low-end hardware or explicit toggle
     return window.location.search.includes('compat') || !window.WebGLRenderingContext
   })
+
+  const isSafari = useMemo(() => {
+    const ua = navigator.userAgent
+    return ua.includes('Safari') && !ua.includes('Chrome') && !ua.includes('Chromium')
+  }, [])
+
+  const [isPrimitive, setIsPrimitive] = useState(isLowPower)
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined' && window.matchMedia) {
@@ -148,8 +155,8 @@ function App() {
     <div style={{ width: '100vw', height: '100vh', background: isDarkMode ? '#050505' : '#ffffff', position: 'relative', overflow: 'hidden' }}>
       <Loader isDarkMode={isDarkMode} />
       <Canvas
-        dpr={[1, 1.5]}
-        shadows={!isLowPower}
+        dpr={[1, isSafari ? 1.0 : 1.5]}
+        shadows="soft"
         camera={{ position: [0, 20, 90], fov: 45 }}
         gl={{
           antialias: false,
@@ -161,14 +168,14 @@ function App() {
         <ambientLight intensity={isLowPower ? 0.8 : 0.01} />
         <directionalLight
           position={[50, 100, 50]}
-          intensity={isLowPower ? 0.5 : 1.2}
+          intensity={isLowPower ? 0.4 : 1.0}
           castShadow={!isLowPower}
-          shadow-mapSize={[512, 512]}
+          shadow-mapSize={[1024, 1024]}
           shadow-camera-left={-70}
           shadow-camera-right={70}
           shadow-camera-top={70}
           shadow-camera-bottom={-70}
-          shadow-bias={-0.0005}
+          shadow-bias={-0.001}
         />
 
         {/* Visual Sun and Glow Sprite */}
@@ -181,7 +188,7 @@ function App() {
               <meshStandardMaterial
                 color="#ffffff"
                 emissive="#fff9e6"
-                emissiveIntensity={20}
+                emissiveIntensity={17}
                 toneMapped={false}
               />
             )}
@@ -197,8 +204,8 @@ function App() {
             </sprite>
           )}
         </group>
-        <pointLight position={[-40, -40, -40]} intensity={0.15} color="#ffffff" castShadow={!isLowPower} shadow-bias={-0.001} />
-        {!isLowPower && <pointLight position={[40, 40, 80]} intensity={0.05} color="#ffeedd" />}
+        <pointLight position={[-40, -40, -40]} intensity={0.12} color="#ffffff" castShadow={!isLowPower} shadow-bias={-0.001} />
+        {!isLowPower && <pointLight position={[40, 40, 80]} intensity={0.04} color="#ffeedd" />}
 
         <OrbitControls
           enableZoom={true}
@@ -207,26 +214,34 @@ function App() {
           enableRotate={true}
           rotateSpeed={0.3}
           autoRotate={true}
-          autoRotateSpeed={-0.4}
+          autoRotateSpeed={-0.64}
           minDistance={35}
           maxDistance={63}
         />
 
         <Suspense fallback={null}>
-          <Basketballs count={isLowPower ? 40 : 80} lowPower={isLowPower} />
+          <Basketballs
+            count={isLowPower ? 40 : 80}
+            lowPower={isLowPower}
+            isPrimitive={isPrimitive}
+            setIsPrimitive={setIsPrimitive}
+          />
           {!isLowPower && <Environment preset="city" blur={0.5} />}
         </Suspense>
 
         {!isLowPower && (
           <EffectComposer disableNormalPass>
-            <Bloom luminanceThreshold={1.2} mipmapBlur intensity={1.0} radius={0.5} />
+            <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.85} radius={0.5} />
+            <Noise opacity={0.02} />
             <Vignette eskil={false} offset={0.35} darkness={isDarkMode ? 0.65 : 0.54} />
           </EffectComposer>
         )}
       </Canvas>
-      <div style={{ position: 'absolute', bottom: 20, right: 20, color: isDarkMode ? 'white' : 'black', opacity: 0.3, pointerEvents: 'none', fontSize: '10px' }}>
-        {isLowPower ? 'High Compatibility Mode' : 'High Performance Mode'}
-      </div>
+      {isPrimitive && (
+        <div style={{ position: 'absolute', bottom: 20, right: 20, color: isDarkMode ? 'white' : 'black', opacity: 0.3, pointerEvents: 'none', fontSize: '10px' }}>
+          {isLowPower ? 'High Compatibility Mode' : 'High Performance Mode'}
+        </div>
+      )}
     </div>
   )
 }
