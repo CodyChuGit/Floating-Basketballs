@@ -93,13 +93,13 @@
   ],
   "images": [
     {
-      "uri": "textures/Basketball_size6_baseColor.jpeg"
+      "uri": "textures/Basketball_size6_baseColor.webp"
     },
     {
-      "uri": "textures/Basketball_size6_metallicRoughness.jpeg"
+      "uri": "textures/Basketball_size6_metallicRoughness.webp"
     },
     {
-      "uri": "textures/Basketball_size6_normal.jpeg"
+      "uri": "textures/Basketball_size6_normal.webp"
     }
   ],
   "materials": [
