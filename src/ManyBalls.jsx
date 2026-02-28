@@ -6,7 +6,7 @@
 import { useMemo, Suspense, useRef, useState, useEffect } from 'react'
 import './App.css'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Environment, OrbitControls, useGLTF, useProgress } from '@react-three/drei'
+import { Environment, OrbitControls, useGLTF, useProgress, Billboard } from '@react-three/drei'
 import { Bloom, Noise, Vignette, EffectComposer } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { PhysicsSimulator } from './physics.js'
@@ -166,22 +166,50 @@ function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Procedural sun glow — 256×256 radial gradient canvas texture
-  const glowTexture = useMemo(() => {
-    const c = document.createElement('canvas')
-    c.width = c.height = 256
-    const ctx = c.getContext('2d')
-    const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128)
-    g.addColorStop(0, 'rgba(255,255,255,1)')
-    g.addColorStop(0.1, 'rgba(255,240,200,0.9)')
-    g.addColorStop(0.4, 'rgba(255,180,100,0.4)')
-    g.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.fillStyle = g
-    ctx.fillRect(0, 0, 256, 256)
-    return new THREE.CanvasTexture(c)
-  }, [])
+  // Shader material for the sun's glow — mathematically perfect, resolution independent
+  const glowMaterial = useMemo(() => new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec2 vUv;
+      void main() {
+        // Calculate distance from center (0.0 at center, 0.5 at edges)
+        float dist = distance(vUv, vec2(0.5));
+        
+        // Invert to get strength (1.0 at center, 0.0 at edges)
+        float strength = max(0.0, 1.0 - dist * 2.0);
+        
+        // Exponential falloff for softer edges
+        float alpha = pow(strength, 1.5);
+        
+        // Beautiful multi-stop color curve
+        vec3 col = vec3(0.0);
+        if (strength > 0.8) {
+          col = mix(vec3(1.0, 0.94, 0.78), vec3(1.0), (strength - 0.8) * 5.0);
+        } else if (strength > 0.4) {
+          col = mix(vec3(1.0, 0.7, 0.39), vec3(1.0, 0.94, 0.78), (strength - 0.4) * 2.5);
+        } else {
+          col = mix(vec3(0.0), vec3(1.0, 0.7, 0.39), strength * 2.5);
+        }
+        
+        // Microscopic noise dither to eliminate banding on 8-bit monitors
+        float noise = (fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0;
+        
+        // Pre-multiply alpha for additive blending
+        gl_FragColor = vec4(col * alpha + noise, alpha);
+      }
+    `
+  }), [])
 
-  useEffect(() => () => glowTexture.dispose(), [glowTexture])
+  useEffect(() => () => glowMaterial.dispose(), [glowMaterial])
 
   const bg = isDarkMode ? '#020202' : '#f0f0f0'
 
@@ -232,9 +260,11 @@ function App() {
             }
           </mesh>
           {!isLowPower && (
-            <sprite scale={[70, 70, 1]}>
-              <spriteMaterial map={glowTexture} blending={THREE.AdditiveBlending} depthWrite={false} transparent />
-            </sprite>
+            <Billboard follow={true} lockX={false} lockY={false} lockZ={false}>
+              <mesh material={glowMaterial} scale={[70, 70, 1]}>
+                <planeGeometry args={[1, 1]} />
+              </mesh>
+            </Billboard>
           )}
         </group>
 
