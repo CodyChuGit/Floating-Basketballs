@@ -2,7 +2,7 @@ import { useMemo, Suspense, useRef, useState, useEffect } from 'react'
 import './App.css'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Environment, OrbitControls, useGLTF, Html, useProgress } from '@react-three/drei'
-import { Bloom, Noise, EffectComposer } from '@react-three/postprocessing'
+import { Bloom, Noise, Vignette, EffectComposer } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { PhysicsSimulator } from './physics.js'
 
@@ -129,12 +129,21 @@ function App() {
   })
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--dynamic-bg', isDarkMode ? '#020202' : '#f0f0f0')
+    const updateThemeColor = (isDark) => {
+      const color = isDark ? '#020202' : '#f0f0f0'
+      document.documentElement.style.setProperty('--dynamic-bg', color)
+      const metaThemeColor = document.getElementById('theme-color-meta')
+      if (metaThemeColor) {
+        metaThemeColor.content = color
+      }
+    }
+
+    updateThemeColor(isDarkMode)
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handleChange = (e) => {
       setIsDarkMode(e.matches)
-      document.documentElement.style.setProperty('--dynamic-bg', e.matches ? '#020202' : '#f0f0f0')
+      updateThemeColor(e.matches)
     }
 
     if (mediaQuery.addEventListener) {
@@ -165,19 +174,7 @@ function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: isDarkMode ? '#020202' : '#f0f0f0', position: 'relative', overflow: 'hidden' }}>
       <Loader isDarkMode={isDarkMode} />
-      {/* CSS Edge Fades for infinite seamless blending with Safari OS Chrome, exclusively for Mobile iOS */}
-      {isIOS && (
-        <>
-          <div style={{
-            position: 'absolute', top: 0, left: 0, width: '100%', height: '15vh', pointerEvents: 'none', zIndex: 1,
-            background: `linear-gradient(to bottom, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
-          }} />
-          <div style={{
-            position: 'absolute', bottom: 0, left: 0, width: '100%', height: '15vh', pointerEvents: 'none', zIndex: 1,
-            background: `linear-gradient(to top, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
-          }} />
-        </>
-      )}
+      {/* CSS Edge Fades removed in favor of regular Vignette */}
       <Canvas
         dpr={[1, isSafari ? 1.0 : 1.5]}
         shadows="soft"
@@ -257,6 +254,7 @@ function App() {
           <EffectComposer disableNormalPass>
             <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.85} radius={0.5} />
             <Noise opacity={0.02} />
+            <Vignette eskil={false} offset={0.35} darkness={isDarkMode ? 0.65 : 0.38} />
           </EffectComposer>
         )}
       </Canvas>
