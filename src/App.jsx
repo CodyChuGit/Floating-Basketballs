@@ -1,104 +1,110 @@
-import { useState, useEffect, Suspense } from 'react'
+import { useMemo, Suspense, useRef } from 'react'
 import './App.css'
+import { Canvas, useFrame } from '@react-three/fiber'
+import { Environment, OrbitControls, useGLTF, Instances, Instance } from '@react-three/drei'
+import { Bloom, Noise, Vignette, EffectComposer } from '@react-three/postprocessing'
+import * as THREE from 'three'
 
-import { Canvas } from '@react-three/fiber'
-import { Environment, OrbitControls } from '@react-three/drei'
-import Ball from '../public/Ball.jsx'
-import { EffectComposer, DepthOfField } from '@react-three/postprocessing';
+// High-performance ball component using Instancing
+function Basketballs({ count = 100 }) {
+  const { nodes, materials } = useGLTF('/Ball.gltf')
 
-
-function App() {
-  const [balls, setBalls] = useState([])
-  const numBalls = 100 // Number of balls
-
-  useEffect(() => {
-    const generateRandomPosition = () => {
-      return [
-        Math.random() * 100 - 50, // Random x position between -5 and 5
-        Math.random() * 100 - 50, // Random y position between -5 and 5
-        Math.random() * 100 - 50  // Random z position between -5 and 5
-      ]
-    }
-
-    const generateRandomRotation = () => {
-      return [
-        Math.random() * Math.PI * 2, // Random rotation around x-axis
-        Math.random() * Math.PI * 2, // Random rotation around y-axis
-        Math.random() * Math.PI * 2  // Random rotation around z-axis
-      ]
-    }
-
-    const checkCollision = (newBallPosition) => {
-      for (const ball of balls) {
-        const distance = Math.sqrt(
-          Math.pow(newBallPosition[0] - ball.position[0], 2) +
-          Math.pow(newBallPosition[1] - ball.position[1], 2) +
-          Math.pow(newBallPosition[2] - ball.position[2], 2)
-        )
-        if (distance < 6) { // Adjust the collision threshold as needed
-          return true // Collision detected
-        }
-      }
-      return false // No collision detected
-    }
-
-    const checkCameraCollision = (newBallPosition) => {
-      const distance = Math.sqrt(
-        Math.pow(newBallPosition[0], 2) +
-        Math.pow(newBallPosition[1], 2) +
-        Math.pow(newBallPosition[2], 2)
-      )
-      if (distance < .5) { // Adjust the collision threshold as needed
-        return true // Collision detected
-      }
-      return false // No collision detected
-    }
-
-    const newBalls = Array.from({ length: numBalls }, () => {
-      let newPosition = generateRandomPosition()
-      while (checkCollision(newPosition) || checkCameraCollision(newPosition)) {
-        newPosition = generateRandomPosition()
-      }
-      return {
-        position: newPosition,
-        rotation: generateRandomRotation()
-      }
-    })
-
-    setBalls(newBalls)
-  }, [numBalls])
-
-  useEffect(() => {
-    const rotationInterval = setInterval(() => {
-      setBalls(prevBalls => {
-        return prevBalls.map(ball => ({
-          ...ball,
-          rotation: [ball.rotation[0], ball.rotation[1] + 0.005, ball.rotation[2]]
-        }))
-      })
-    }, 16)
-
-    return () => {
-      clearInterval(rotationInterval)
-    }
-  }, [])
+  // Generate random positions and rotations only once
+  const ballData = useMemo(() => {
+    return Array.from({ length: count }, () => ({
+      position: [
+        Math.random() * 80 - 40,
+        Math.random() * 80 - 40,
+        Math.random() * 80 - 40
+      ],
+      rotation: [
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2,
+        Math.random() * Math.PI * 2
+      ],
+      speed: Math.random() * 0.01 + 0.002
+    }))
+  }, [count])
 
   return (
-    <>
-      <Canvas camera={{ position: [0, 0, 3]}} >
-        <ambientLight intensity={0.6} />
-        <OrbitControls enableZoom={false} enablePan={false} enableRotate={true} rotateSpeed={.3} autoRotate={false} autoRotateSpeed={1} dampingFactor={0.1} />
+    <Instances range={count} geometry={nodes.Object_2.geometry} material={materials.Basketball_size6}>
+      <group rotation={[-Math.PI / 2, 0, 0]}>
+        {ballData.map((data, i) => (
+          <IndividualBall key={i} {...data} />
+        ))}
+      </group>
+    </Instances>
+  )
+}
+
+function IndividualBall({ position, rotation, speed }) {
+  const ref = useRef()
+  const originalPos = useMemo(() => new THREE.Vector3(...position), [position])
+  const vec = new THREE.Vector3()
+
+  useFrame((state) => {
+    if (ref.current) {
+      ref.current.rotation.y += speed
+
+      // Collision avoidance math: Push balls away from camera
+      const dist = ref.current.position.distanceTo(state.camera.position)
+      const threshold = 12 // Distance at which balls start dodging
+
+      if (dist < threshold) {
+        // Calculate direction from camera to ball
+        vec.copy(ref.current.position).sub(state.camera.position).normalize()
+
+        // Push force gets stronger as camera gets closer
+        const force = (threshold - dist) * 0.15
+        ref.current.position.addScaledVector(vec, force)
+      }
+
+      // Smoothly return to original position
+      ref.current.position.lerp(originalPos, 0.05)
+    }
+  })
+  return <Instance ref={ref} position={position} rotation={rotation} />
+}
+
+function App() {
+  return (
+    <div style={{ width: '100vw', height: '100vh', background: '#050505' }}>
+      <Canvas camera={{ position: [0, 0, 15], fov: 45 }}>
+        <color attach="background" args={['#050505']} />
+
+        {/* Cinematic Lighting */}
+        <ambientLight intensity={0.2} />
+        <spotLight position={[10, 20, 10]} angle={0.15} penumbra={1} intensity={2} />
+        <pointLight position={[-10, -10, -10]} intensity={1.5} color="#ff0055" />
+        <pointLight position={[10, -10, 20]} intensity={1} color="#0088ff" />
+
+        <OrbitControls
+          enableZoom={true}
+          enablePan={false}
+          enableRotate={true}
+          rotateSpeed={0.5}
+          minDistance={5}
+          maxDistance={90}
+          makeDefault
+        />
+
         <Suspense fallback={null}>
-          {balls.map((ball, index) => (
-            <Ball key={index} position={ball.position} rotation={ball.rotation} />
-          ))}
+          <Basketballs count={150} />
+          <Environment preset="city" blur={0.8} />
         </Suspense>
-        <Environment preset="city" blur={0.8} />
-        <EffectComposer>
-     
-    </EffectComposer>
+
+        <EffectComposer disableNormalPass>
+          <Bloom
+            luminanceThreshold={1}
+            mipmapBlur
+            intensity={0.8}
+            radius={0.4}
+          />
+          <Noise opacity={0.04} />
+          <Vignette eskil={false} offset={0.1} darkness={1.1} />
+        </EffectComposer>
       </Canvas>
-    </>
+    </div>
   )
 }
 
