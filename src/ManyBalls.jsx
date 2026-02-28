@@ -132,10 +132,6 @@ function App() {
     const updateThemeColor = (isDark) => {
       const color = isDark ? '#020202' : '#f0f0f0'
       document.documentElement.style.setProperty('--dynamic-bg', color)
-      const metaThemeColor = document.getElementById('theme-color-meta')
-      if (metaThemeColor) {
-        metaThemeColor.content = color
-      }
     }
 
     updateThemeColor(isDarkMode)
