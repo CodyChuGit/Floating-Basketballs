@@ -103,7 +103,6 @@ function Basketballs({ count = 80, isPrimitive, isDarkMode, isLowPower }) {
 
 // --- App ---
 function App() {
-  const sunRef = useRef()
 
   // Performance mode: auto-detect or manual ?compat override
   const [isLowPower, setIsLowPower] = useState(() =>
@@ -124,7 +123,7 @@ function App() {
 
   // Effects state — each toggleable via "O" key cycling
   const [effects, setEffects] = useState(ALL_EFFECTS_ON)
-  const [effectIdx, setEffectIdx] = useState(0)
+  const effectIdxRef = useRef(0)
   const [showEffectsHUD, setShowEffectsHUD] = useState(false)
 
   // Theme — follows OS preference unless user presses "L" to override
@@ -133,10 +132,6 @@ function App() {
     return true
   })
   const [themeOverride, setThemeOverride] = useState(false)
-  const envIntensity = isDarkMode ? 0.06 : 0.4
-
-  // Dark Mode scales illumination to 2.5x to compensate for lack of Environment map
-  const modeMult = isDarkMode ? 2.5 : 1.0
 
   useEffect(() => {
     if (themeOverride) return
@@ -155,16 +150,15 @@ function App() {
       else if (k === 'p') setIsPrimitive(v => !v)
       else if (k === 'o') {
         setShowEffectsHUD(true)
-        setEffectIdx(prev => {
-          const next = prev + 1
-          if (next > EFFECT_NAMES.length) {
-            setEffects(ALL_EFFECTS_ON)
-            setShowEffectsHUD(false)
-            return 0
-          }
+        const next = effectIdxRef.current + 1
+        if (next > EFFECT_NAMES.length) {
+          setEffects(ALL_EFFECTS_ON)
+          setShowEffectsHUD(false)
+          effectIdxRef.current = 0
+        } else {
           setEffects(cur => ({ ...cur, [EFFECT_NAMES[next - 1]]: false }))
-          return next
-        })
+          effectIdxRef.current = next
+        }
       }
     }
     window.addEventListener('keydown', onKey)
@@ -249,34 +243,31 @@ function App() {
       >
         <color attach="background" args={[bg]} />
 
-        {/* Ambient fill light — boosted in Dark Mode to replace Environment bounce */}
-        <ambientLight intensity={(isLowPower ? (isDarkMode ? 0.10 : 0.55) : 0.005) * modeMult} />
-        <directionalLight position={[50, 100, 50]} intensity={(isLowPower ? (isDarkMode ? 1.30 : 2.70) : 1.0) * modeMult}
+        {/* Lighting rig — all values pre-computed per mode/theme */}
+        <ambientLight intensity={isLowPower ? (isDarkMode ? 0.25 : 0.45) : (isDarkMode ? 0.0125 : 0)} />
+        <directionalLight position={[50, 100, 50]} intensity={isLowPower ? (isDarkMode ? 2.75 : 2.5) : (isDarkMode ? 2.5 : 3.0)}
           castShadow={!isLowPower && effects.Shadows}
           shadow-mapSize={[4096, 4096]} shadow-camera-left={-55} shadow-camera-right={55}
           shadow-camera-top={55} shadow-camera-bottom={-55} shadow-bias={-0.002} />
 
         {/* Sun mesh + additive glow sprite */}
         <group position={[50, 100, 50]}>
-          <mesh ref={sunRef}>
-            <sphereGeometry args={[5, isLowPower ? 8 : 16, isLowPower ? 8 : 16]} />
+          <mesh>
+            <sphereGeometry args={[5, isLowPower ? 24 : 16, isLowPower ? 24 : 16]} />
             {isLowPower
-              ? <meshBasicMaterial color="#ffffff" />
+              ? <meshBasicMaterial color={isDarkMode ? '#fff5e0' : '#ffffff'} toneMapped={false} />
               : <meshStandardMaterial color="#ffffff" emissive="#fff9e6" emissiveIntensity={17} toneMapped={false} />
             }
           </mesh>
-          {!isLowPower && (
-            <Billboard follow={true} lockX={false} lockY={false} lockZ={false}>
-              <mesh material={glowMaterial} scale={[70, 70, 1]}>
-                <planeGeometry args={[1, 1]} />
-              </mesh>
-            </Billboard>
-          )}
+          <Billboard follow={true} lockX={false} lockY={false} lockZ={false}>
+            <mesh material={glowMaterial} scale={isLowPower ? (isDarkMode ? [40, 40, 1] : [80, 80, 1]) : [70, 70, 1]}>
+              <planeGeometry args={[1, 1]} />
+            </mesh>
+          </Billboard>
         </group>
 
-        <pointLight position={[-40, -40, -40]} intensity={0.1 * modeMult} color="#ffffff" />
-        {/* Secondary accent light — boosted in Dark Mode */}
-        {!isLowPower && <pointLight position={[40, 40, 80]} intensity={0.02 * modeMult} color="#ffeedd" />}
+        <pointLight position={[-40, -40, -40]} intensity={isDarkMode ? 0.25 : 0.1} color="#ffffff" />
+        {!isLowPower && <pointLight position={[40, 40, 80]} intensity={isDarkMode ? 0.05 : 0.02} color="#ffeedd" />}
 
         {/* Camera controls */}
         <OrbitControls enableZoom zoomSpeed={0.3} enablePan={false} enableRotate
@@ -284,8 +275,7 @@ function App() {
 
         <Suspense fallback={null}>
           <Basketballs count={isLowPower ? 40 : 80} isPrimitive={isPrimitive} isDarkMode={isDarkMode} isLowPower={isLowPower} />
-          {/* Environment now enabled in both Light and Dark Mode; with user-controlled intensity */}
-          {!isLowPower && effects.Environment && <Environment preset="city" blur={0.5} environmentIntensity={envIntensity} />}
+          {!isLowPower && effects.Environment && <Environment preset="city" blur={0.5} environmentIntensity={isDarkMode ? 0.06 : 0.4} />}
         </Suspense>
 
         {/* Post-processing — only in high-perf mode, each effect individually toggleable */}

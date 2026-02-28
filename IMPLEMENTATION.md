@@ -38,14 +38,14 @@ The `App` component acts as the root orchestrator. It manages the following stat
 
 The `<Canvas>` setup utilizes strict WebGL parameters to optimize memory:
 - `gl={{ antialias: true, powerPreference: isLowPower ? 'low-power' : 'high-performance', preserveDrawingBuffer: false, stencil: false, depth: true }}`
-- **Lighting Rig:**
-    - `ambientLight` — High-perf: `0.005 * modeMult`. Compat dark: `0.10 * modeMult`, compat light: `0.55 * modeMult`.
-    - `directionalLight` — High-perf: `1.0 * modeMult`. Compat dark: `1.30 * modeMult`, compat light: `2.70 * modeMult`.
-    - `pointLight` x2 (Base: `0.1` and `0.02`, scaled by `modeMult`).
-    - `modeMult` — set to `2.5` in Dark Mode to boost manual lights alongside the reduced Environment map; `1.0` in Light Mode.
+- **Lighting Rig:** All intensities are hardcoded per mode/theme to avoid runtime multipliers:
+    - `ambientLight` — High-perf: `0.0125` (Dark), `0` (Light). Compat: `0.25` (Dark), `0.45` (Light).
+    - `directionalLight` — High-perf: `2.5` (Dark), `3.0` (Light). Compat: `2.75` (Dark), `2.5` (Light).
+    - `pointLight` 1 — Base fill: `0.25` (Dark), `0.1` (Light).
+    - `pointLight` 2 — High-perf accent: `0.05` (Dark), `0.02` (Light).
     - `Environment` map (city preset) is enabled in **both** themes, with `environmentIntensity` set to `0.06` (6%) in Dark Mode and `0.4` (40%) in Light Mode.
     - Shadows: `4096x4096` map with a tight `+/- 55` unit frustum and `shadow-bias: -0.002` in high-perf.
-- **Visual Sun:** A sphere mesh with an `emissive` material (`intensity: 17`). In high-perf, it is overlaid with a `<Billboard>` containing a custom `THREE.ShaderMaterial`. This procedural shader calculates a mathematically perfect radial gradient in 32-bit float precision per-pixel on the GPU, avoiding the color banding and dithering artifacts inherent to 8-bit Canvas Textures. It also injects a microscopic high-frequency noise dither (`fract(sin(...) * ...)`) to guarantee flawless visual falloff on consumer monitors, specifically eliminating the "stippling" dots visible on pitch-black backgrounds.
+- **Visual Sun:** A sphere mesh with an `emissive` material (`intensity: 17` in high-perf; or `meshBasicMaterial` with `toneMapped={false}` combining `#fff5e0` in dark compat and `#ffffff` in light compat). It is overlaid with a `<Billboard>` containing a custom `THREE.ShaderMaterial`. This procedural shader calculates a mathematically perfect radial gradient in 32-bit float precision per-pixel on the GPU, avoiding the color banding and dithering artifacts inherent to 8-bit Canvas Textures. It also injects a microscopic high-frequency noise dither (`fract(sin(...) * ...)`) to guarantee flawless visual falloff on consumer monitors. The billboard scales to `[70, 70, 1]` in high-perf, `[40, 40, 1]` in dark compat, and `[80, 80, 1]` in light compat to blend seamlessly.
 - **Postprocessing:** `EffectComposer` is wrapped in an `if (!isLowPower)`. The composer uses `multisampling={4}` and `disableNormalPass` to save memory. Effects included: `Bloom` (threshold 1.2), `Noise` (opacity 0.022 / 2.2%), `Vignette` (darkness adjusts dynamically based on `isDarkMode`).
 - **Compatibility Mode Saturation:** In `isLowPower` mode, a CSS `filter: saturate(0.8)` is applied to the Canvas element to reduce oversaturated colors from the simplified lighting.
 
@@ -104,4 +104,4 @@ Calculates the Total Kinetic Energy (sum of all `velocity.lengthSq()`). If the s
 
 - **Scene Orbit:** Utilizes Drei's `<OrbitControls>` configured to auto-rotate outward, with pan disabled, zoom bounded (`minDistance=35`, `maxDistance=63`), and damping enabled.
 - **Native Loading:** The `index.html` inline `<style>` and `div#preloader` contain a CSS-animated `loading-ball.webp` that renders instantly. The `Loader` component hooks into WebGL asset progress and removes the HTML element when WebGL is fully hydrated, avoiding any white flash.
-- **Mode-Specific Lighting:** The `<Environment />` component (city preset) is active in both themes. Dark Mode uses `environmentIntensity: 0.06` (6%) for subtle reflections and boosts all manual light intensities by `2.5x`. Light Mode uses `environmentIntensity: 0.4` (40%) and baseline `1.0x` intensities.
+- **Mode-Specific Lighting:** The `<Environment />` component (city preset) is active in both themes. Dark Mode uses `environmentIntensity: 0.06` (6%) for subtle reflections. Light Mode uses `environmentIntensity: 0.4` (40%). All other lighting values are explicitly defined per-theme in the component's JSX without runtime scaling multipliers.
