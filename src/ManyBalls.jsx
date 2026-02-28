@@ -1,6 +1,6 @@
 import { useMemo, Suspense, useRef, useState, useEffect } from 'react'
 import './App.css'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Environment, OrbitControls, useGLTF, Html, useProgress } from '@react-three/drei'
 import { Bloom, Noise, Vignette, EffectComposer } from '@react-three/postprocessing'
 import * as THREE from 'three'
@@ -33,10 +33,19 @@ function Loader({ isDarkMode }) {
 
 function Basketballs({ count = 80, lowPower = false }) {
   const { nodes, materials } = useGLTF('/Ball.gltf')
+  const { gl } = useThree()
   const meshRef = useRef()
   const primRef = useRef()
 
   const [isPrimitive, setIsPrimitive] = useState(lowPower)
+
+  useEffect(() => {
+    Object.values(materials).forEach(material => {
+      if (material.map) material.map.anisotropy = gl.capabilities.getMaxAnisotropy()
+      if (material.normalMap) material.normalMap.anisotropy = gl.capabilities.getMaxAnisotropy()
+      if (material.roughnessMap) material.roughnessMap.anisotropy = gl.capabilities.getMaxAnisotropy()
+    })
+  }, [materials, gl])
 
   useEffect(() => {
     const handleKeyDown = (e) => {
