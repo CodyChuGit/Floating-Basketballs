@@ -230,6 +230,23 @@ function App() {
   const [isPrimitive, setIsPrimitive] = useState(isLowPower)
 
   // -----------------------------------------------------------------------
+  // Effects Toggle State
+  // Each effect can be individually disabled via the "O" key cycling.
+  // The cycle order: Bloom → Noise → Vignette → Shadows → Environment → all back on.
+  // -----------------------------------------------------------------------
+  const EFFECT_NAMES = ['Bloom', 'Noise', 'Vignette', 'Shadows', 'Environment']
+  const [effects, setEffects] = useState({
+    Bloom: true,
+    Noise: true,
+    Vignette: true,
+    Shadows: true,
+    Environment: true,
+  })
+  const [effectCycleIndex, setEffectCycleIndex] = useState(0)
+  // Track whether the effects HUD should be visible
+  const [showEffectsHUD, setShowEffectsHUD] = useState(false)
+
+  // -----------------------------------------------------------------------
   // Light/Dark Mode Detection
   // Listens to the OS-level "prefers-color-scheme" media query and
   // hot-swaps the theme in real time if the user changes system settings.
@@ -263,6 +280,7 @@ function App() {
   // "L" — Toggle Light/Dark mode (manual override)
   // "M" — Cycle display modes (High Performance ↔ High Compatibility)
   // "P" — Toggle wireframe diagnostic view
+  // "O" — Cycle through disabling effects one by one, then re-enable all
   // -----------------------------------------------------------------------
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -274,6 +292,22 @@ function App() {
         setIsLowPower(prev => !prev)
       } else if (key === 'p') {
         setIsPrimitive(prev => !prev)
+      } else if (key === 'o') {
+        setShowEffectsHUD(true)
+        setEffectCycleIndex(prev => {
+          const next = prev + 1
+          if (next > EFFECT_NAMES.length) {
+            // All effects have been turned off, re-enable all
+            setEffects({ Bloom: true, Noise: true, Vignette: true, Shadows: true, Environment: true })
+            setShowEffectsHUD(false)
+            return 0
+          } else {
+            // Turn off the next effect in the cycle
+            const effectToDisable = EFFECT_NAMES[next - 1]
+            setEffects(prev => ({ ...prev, [effectToDisable]: false }))
+            return next
+          }
+        })
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -341,10 +375,10 @@ function App() {
       {/* ----------------------------------------------------------------- */}
       <Canvas
         dpr={[1, isSafari ? 1.0 : 1.5]}
-        shadows="soft"
+        shadows={effects.Shadows ? "soft" : false}
         camera={{ position: [0, 20, 90], fov: 45 }}
         gl={{
-          antialias: false,
+          antialias: true,
           powerPreference: isLowPower ? "low-power" : "high-performance",
           preserveDrawingBuffer: false,
           stencil: false,
@@ -370,7 +404,7 @@ function App() {
         <directionalLight
           position={[50, 100, 50]}
           intensity={isLowPower ? 0.4 : 1.0}
-          castShadow={!isLowPower}
+          castShadow={!isLowPower && effects.Shadows}
           shadow-mapSize={[1024, 1024]}
           shadow-camera-left={-70}
           shadow-camera-right={70}
@@ -434,28 +468,43 @@ function App() {
             isDarkMode={isDarkMode}
           />
           {/* HDR Environment Map — provides realistic reflections on ball surfaces */}
-          {!isLowPower && <Environment preset="city" blur={0.5} />}
+          {!isLowPower && effects.Environment && <Environment preset="city" blur={0.5} />}
         </Suspense>
 
         {/* ----- Post-Processing Pipeline ----- */}
         {/* Only active in High Performance mode; stripped entirely in Compat mode */}
-        {!isLowPower && (
-          <EffectComposer disableNormalPass multisampling={0}>
-            {/* Bloom: Soft glow on bright highlights (sun, specular reflections) */}
-            <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.85} radius={0.5} />
-            {/* Noise: Subtle film grain for organic, non-digital feel */}
-            <Noise opacity={0.02} />
-            {/* Vignette: Cinematic edge darkening — stronger in dark mode */}
-            <Vignette eskil={false} offset={0.35} darkness={isDarkMode ? 0.65 : 0.38} />
+        {/* Individual effects can be toggled via the "O" key */}
+        {!isLowPower && (effects.Bloom || effects.Noise || effects.Vignette) && (
+          <EffectComposer disableNormalPass multisampling={4}>
+            {effects.Bloom && <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.85} radius={0.5} />}
+            {effects.Noise && <Noise opacity={0.02} />}
+            {effects.Vignette && <Vignette eskil={false} offset={0.35} darkness={isDarkMode ? 0.65 : 0.38} />}
           </EffectComposer>
         )}
       </Canvas>
+
+      {/* ----- Effects HUD (top-right, visible when cycling effects via "O") ----- */}
+      {showEffectsHUD && !isLowPower && (
+        <div style={{
+          position: 'absolute', top: 20, right: 20,
+          color: isDarkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
+          pointerEvents: 'none', fontSize: '11px', zIndex: 10,
+          fontFamily: 'monospace', lineHeight: 1.8, textAlign: 'left'
+        }}>
+          {EFFECT_NAMES.map(name => (
+            <div key={name}>
+              {effects[name] ? '☑' : '☐'} {name}
+            </div>
+          ))}
+          <div style={{ marginTop: 4, opacity: 0.4, fontSize: '9px' }}>[O] cycle effects</div>
+        </div>
+      )}
 
       {/* ----- Diagnostic Mode Label & Keyboard Shortcuts ----- */}
       {isPrimitive && (
         <div style={{ position: 'absolute', bottom: 20, right: 20, color: isDarkMode ? 'white' : 'black', opacity: 0.3, pointerEvents: 'none', fontSize: '10px', zIndex: 10, textAlign: 'right', lineHeight: 1.6 }}>
           {isLowPower ? 'High Compatibility Mode' : 'High Performance Mode'}<br />
-          [L] Theme · [M] Mode · [P] Wireframe
+          [L] Theme · [M] Mode · [P] Wireframe · [O] Effects
         </div>
       )}
     </div>
