@@ -1,24 +1,57 @@
+/**
+ * ============================================================================
+ * ManyBalls.jsx — Main Application Component
+ * ============================================================================
+ *
+ * The primary React component that orchestrates the entire 3D basketball
+ * simulation. It manages:
+ *
+ *   - Loading screen with animated bouncing ball
+ *   - InstancedMesh rendering of 80 basketballs (40 in compat mode)
+ *   - Custom physics simulation (see physics.js)
+ *   - Post-processing pipeline (Bloom, Noise, Vignette)
+ *   - Light/Dark mode detection and seamless Safari iOS integration
+ *   - Performance-tiered rendering (High Performance vs High Compatibility)
+ *
+ * ============================================================================
+ */
+
 import { useMemo, Suspense, useRef, useState, useEffect } from 'react'
 import './App.css'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { Environment, OrbitControls, useGLTF, Html, useProgress } from '@react-three/drei'
+import { Environment, OrbitControls, useGLTF, useProgress } from '@react-three/drei'
 import { Bloom, Noise, Vignette, EffectComposer } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { PhysicsSimulator } from './physics.js'
 
+
+// ==========================================================================
+// Loader — Full-screen loading overlay with animated bouncing basketball
+// ==========================================================================
+
+/**
+ * Displays a full-screen loading overlay while 3D assets are being downloaded.
+ * Uses @react-three/drei's `useProgress` to track asset loading completion.
+ * Once 100% loaded, the overlay fades out over 1 second and then unmounts.
+ *
+ * @param {boolean} isDarkMode — Controls the overlay background color.
+ */
 function Loader({ isDarkMode }) {
   const { progress } = useProgress()
   const [isFading, setIsFading] = useState(false)
   const [isHidden, setIsHidden] = useState(false)
-  // Only fade out when the 3js scene is FULLY loaded
+
   useEffect(() => {
     if (progress >= 100 && !isFading) {
+      // Begin the fade-out transition immediately
       const fade = setTimeout(() => setIsFading(true), 0)
+      // Unmount the overlay after the CSS transition completes (1 second)
       const hide = setTimeout(() => setIsHidden(true), 1000)
       return () => { clearTimeout(fade); clearTimeout(hide) }
     }
   }, [progress, isFading])
 
+  // Once fully hidden, return null to remove from DOM entirely
   if (isHidden) return null
 
   return (
@@ -31,23 +64,49 @@ function Loader({ isDarkMode }) {
 }
 
 
+// ==========================================================================
+// Basketballs — Instanced 3D basketball renderer with physics
+// ==========================================================================
+
+/**
+ * Renders N basketballs using Three.js InstancedMesh for maximum performance.
+ * Each ball's position is driven by the PhysicsSimulator every frame.
+ *
+ * Two InstancedMeshes are maintained in parallel:
+ *   1. Textured mesh — The full basketball with PBR materials
+ *   2. Wireframe mesh — A diagnostic view toggled via the "P" key
+ *
+ * @param {number} count — Number of basketball instances to render.
+ * @param {boolean} lowPower — Whether High Compatibility Mode is active.
+ * @param {boolean} isPrimitive — Whether wireframe diagnostic view is active.
+ * @param {function} setIsPrimitive — State setter for toggling wireframe view.
+ */
 function Basketballs({ count = 80, lowPower = false, isPrimitive, setIsPrimitive }) {
   const { nodes, materials } = useGLTF('/Ball.gltf')
   const { gl } = useThree()
   const meshRef = useRef()
   const primRef = useRef()
 
+  // -----------------------------------------------------------------------
+  // Texture Quality Enhancement
+  // Apply maximum anisotropic filtering to all material texture maps.
+  // This dramatically improves texture clarity at grazing angles and
+  // reduces moiré patterns on the basketball's curved surfaces.
+  // -----------------------------------------------------------------------
   useEffect(() => {
     Object.values(materials).forEach(material => {
       if (material.map) material.map.anisotropy = gl.capabilities.getMaxAnisotropy()
       if (material.normalMap) {
         material.normalMap.anisotropy = gl.capabilities.getMaxAnisotropy()
-        material.normalScale.set(0.7, 0.7)
+        material.normalScale.set(0.7, 0.7) // Soften specular highlights to prevent shimmering
       }
       if (material.roughnessMap) material.roughnessMap.anisotropy = gl.capabilities.getMaxAnisotropy()
     })
   }, [materials, gl])
 
+  // -----------------------------------------------------------------------
+  // Diagnostic Mode Toggle: Press "P" to switch between textured and wireframe
+  // -----------------------------------------------------------------------
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key.toLowerCase() === 'p') {
@@ -58,28 +117,44 @@ function Basketballs({ count = 80, lowPower = false, isPrimitive, setIsPrimitive
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [setIsPrimitive])
 
-  // Clone and CENTER the geometry at origin so physics position == visual center
+  // -----------------------------------------------------------------------
+  // Geometry Centering
+  // Clone the GLTF geometry and re-center it at the origin so that the
+  // physics collision sphere perfectly aligns with the visible mesh.
+  // Without this, bounding box offsets cause balls to "hover" off-center.
+  // -----------------------------------------------------------------------
   const centeredGeo = useMemo(() => {
     const geo = nodes.Object_2.geometry.clone()
     geo.computeBoundingSphere()
     const { center } = geo.boundingSphere
-    // Shift all vertices so the bounding sphere center is at (0,0,0)
     geo.translate(-center.x, -center.y, -center.z)
-    geo.computeBoundingSphere() // Recompute after centering
-    console.log('[Physics] Centered geometry. Radius:', geo.boundingSphere.radius, 'Center:', geo.boundingSphere.center)
+    geo.computeBoundingSphere()
     return geo
   }, [nodes])
 
+  // Extract the actual collision radius from the centered geometry
   const actualRadius = centeredGeo.boundingSphere.radius
 
+  // -----------------------------------------------------------------------
+  // Physics Engine Initialization
+  // Create the simulator once with the correct ball count and radius.
+  // The tempMatrix and localCameraPos are reusable objects to avoid
+  // per-frame garbage collection pressure.
+  // -----------------------------------------------------------------------
   const physics = useMemo(() => new PhysicsSimulator(count, actualRadius), [count, actualRadius])
   const tempMatrix = useMemo(() => new THREE.Matrix4(), [])
   const localCameraPos = useMemo(() => new THREE.Vector3(), [])
 
+  // -----------------------------------------------------------------------
+  // Per-Frame Physics Update (runs every requestAnimationFrame)
+  // Maps the camera's world position into the InstancedMesh's local space,
+  // then advances the physics simulation and syncs visual transforms.
+  // -----------------------------------------------------------------------
   useFrame((state) => {
     if (!meshRef.current && !primRef.current) return
 
-    // Map camera world position to the rotated local space of the InstancedMesh
+    // Transform camera position from world space to the InstancedMesh's
+    // local space (accounting for the -90° X rotation)
     localCameraPos.copy(state.camera.position)
     meshRef.current.worldToLocal(localCameraPos)
 
@@ -87,7 +162,7 @@ function Basketballs({ count = 80, lowPower = false, isPrimitive, setIsPrimitive
     physics.updateInstances(meshRef, primRef, tempMatrix)
   })
 
-  // Primitive geometry & material
+  // Wireframe diagnostic geometry — matches the collision sphere size exactly
   const primitiveGeo = useMemo(() => {
     const r = centeredGeo.boundingSphere.radius
     return new THREE.SphereGeometry(r, 12, 12)
@@ -96,31 +171,63 @@ function Basketballs({ count = 80, lowPower = false, isPrimitive, setIsPrimitive
 
   return (
     <>
+      {/* Primary textured basketball instances */}
       <instancedMesh castShadow receiveShadow visible={!isPrimitive} ref={meshRef} args={[centeredGeo, materials.Basketball_size6, count]} rotation={[-Math.PI / 2, 0, 0]} />
+      {/* Wireframe diagnostic instances (toggled via "P" key) */}
       <instancedMesh castShadow receiveShadow visible={isPrimitive} ref={primRef} args={[primitiveGeo, primitiveMat, count]} rotation={[-Math.PI / 2, 0, 0]} />
     </>
   )
 }
 
+
+// ==========================================================================
+// App — Root application component
+// ==========================================================================
+
 function App() {
   const sunRef = useRef()
 
+  // -----------------------------------------------------------------------
+  // Performance Mode Detection
+  // Automatically enables High Compatibility Mode if:
+  //   - The URL contains "?compat" (manual override)
+  //   - WebGL is not available in the browser
+  // -----------------------------------------------------------------------
   const [isLowPower, setIsLowPower] = useState(() => {
     return window.location.search.includes('compat') || !window.WebGLRenderingContext
   })
 
+  // -----------------------------------------------------------------------
+  // Browser Detection
+  // Safari requires specific DPR capping and feature stripping for
+  // acceptable framerates on Retina displays.
+  // -----------------------------------------------------------------------
   const isSafari = useMemo(() => {
     const ua = navigator.userAgent
     return ua.includes('Safari') && !ua.includes('Chrome') && !ua.includes('Chromium')
   }, [])
 
+  // -----------------------------------------------------------------------
+  // iOS Detection
+  // Used to conditionally render CSS edge gradients that blend
+  // the 3D scene into the Safari browser chrome (top/bottom bars).
+  // -----------------------------------------------------------------------
   const isIOS = useMemo(() => {
     const ua = navigator.userAgent
     return /iPad|iPhone|iPod/.test(ua) || (ua.includes("Mac") && "ontouchend" in document)
   }, [])
 
+  // -----------------------------------------------------------------------
+  // Wireframe Diagnostic Mode
+  // Defaults to wireframe in Low Power mode for visual clarity.
+  // -----------------------------------------------------------------------
   const [isPrimitive, setIsPrimitive] = useState(isLowPower)
 
+  // -----------------------------------------------------------------------
+  // Light/Dark Mode Detection
+  // Listens to the OS-level "prefers-color-scheme" media query and
+  // hot-swaps the theme in real time if the user changes system settings.
+  // -----------------------------------------------------------------------
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined' && window.matchMedia) {
       return window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -140,7 +247,12 @@ function App() {
     }
   }, [])
 
-  // Procedural gradient glow for the sun
+  // -----------------------------------------------------------------------
+  // Procedural Sun Glow Texture
+  // Generates a radial gradient on an off-screen canvas to create a soft,
+  // warm glow effect around the sun. Uses Canvas2D instead of loading an
+  // image file, keeping the asset payload minimal.
+  // -----------------------------------------------------------------------
   const glowTexture = useMemo(() => {
     const canvas = document.createElement('canvas')
     canvas.width = 256
@@ -156,22 +268,39 @@ function App() {
     return new THREE.CanvasTexture(canvas)
   }, [])
 
+  // =========================================================================
+  // RENDER
+  // =========================================================================
   return (
     <div style={{ width: '100vw', height: '100vh', background: isDarkMode ? '#020202' : '#f0f0f0', position: 'relative', overflow: 'hidden' }}>
+
+      {/* Loading Screen — Fades out once all 3D assets are downloaded */}
       <Loader isDarkMode={isDarkMode} />
-      {/* CSS Edge Fades for infinite seamless blending with Safari OS Chrome, exclusively for Mobile iOS */}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* iOS Safari Edge Fades                                             */}
+      {/* Two CSS linear-gradient overlays (top + bottom) that blend the    */}
+      {/* 3D scene into Safari's browser chrome, creating a seamless        */}
+      {/* "infinite screen" effect. Only rendered on iOS devices.           */}
+      {/* ----------------------------------------------------------------- */}
       {isIOS && (
         <>
           <div style={{
             position: 'absolute', top: 0, left: 0, width: '100%', height: '10vh', pointerEvents: 'none', zIndex: 1,
-            background: `linear-gradient(to bottom, ${isDarkMode ? '#020202 0%, #020202 60%, transparent 100%' : '#f0f0f0 0%, #f0f0f0 60%, transparent 100%'})`
+            background: `linear-gradient(to bottom, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
           }} />
           <div style={{
             position: 'absolute', bottom: 0, left: 0, width: '100%', height: '10vh', pointerEvents: 'none', zIndex: 1,
-            background: `linear-gradient(to top, ${isDarkMode ? '#020202 0%, #020202 60%, transparent 100%' : '#f0f0f0 0%, #f0f0f0 60%, transparent 100%'})`
+            background: `linear-gradient(to top, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
           }} />
         </>
       )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Three.js Canvas                                                   */}
+      {/* DPR is capped to 1.0 on Safari to prevent Retina fragment shader  */}
+      {/* overload, and 1.5 elsewhere for crisp visuals without 4K cost.    */}
+      {/* ----------------------------------------------------------------- */}
       <Canvas
         dpr={[1, isSafari ? 1.0 : 1.5]}
         shadows="soft"
@@ -181,9 +310,15 @@ function App() {
           powerPreference: isLowPower ? "low-power" : "high-performance"
         }}
       >
+        {/* Canvas clear color — matches the HTML background for seamlessness */}
         <color attach="background" args={[isDarkMode ? '#020202' : '#f0f0f0']} />
 
+        {/* ----- Lighting Rig ----- */}
+
+        {/* Ambient fill light — very faint in High Performance, brighter in Compat */}
         <ambientLight intensity={isLowPower ? 0.8 : 0.01} />
+
+        {/* Primary directional light — acts as the "sun" for shadows and highlights */}
         <directionalLight
           position={[50, 100, 50]}
           intensity={isLowPower ? 0.4 : 1.0}
@@ -196,7 +331,7 @@ function App() {
           shadow-bias={-0.001}
         />
 
-        {/* Visual Sun and Glow Sprite */}
+        {/* Visual Sun and Glow Sprite — positioned at the directional light source */}
         <group position={[50, 100, 50]}>
           <mesh ref={sunRef}>
             <sphereGeometry args={[5, isLowPower ? 8 : 16, isLowPower ? 8 : 16]} />
@@ -211,6 +346,7 @@ function App() {
               />
             )}
           </mesh>
+          {/* Additive-blended glow sprite — creates a soft halo around the sun */}
           {!isLowPower && (
             <sprite scale={[70, 70, 1]}>
               <spriteMaterial
@@ -222,9 +358,13 @@ function App() {
             </sprite>
           )}
         </group>
-        <pointLight position={[-40, -40, -40]} intensity={0.12} color="#ffffff" castShadow={!isLowPower} shadow-bias={-0.001} />
+
+        {/* Back-fill point light — subtle rim lighting from the opposite direction */}
+        <pointLight position={[-40, -40, -40]} intensity={0.12} color="#ffffff" />
+        {/* Secondary accent light — warm tint for visual depth */}
         {!isLowPower && <pointLight position={[40, 40, 80]} intensity={0.04} color="#ffeedd" />}
 
+        {/* ----- Camera Controls ----- */}
         <OrbitControls
           enableZoom={true}
           zoomSpeed={0.3}
@@ -237,6 +377,7 @@ function App() {
           maxDistance={63}
         />
 
+        {/* ----- Scene Content ----- */}
         <Suspense fallback={null}>
           <Basketballs
             count={isLowPower ? 40 : 80}
@@ -244,17 +385,25 @@ function App() {
             isPrimitive={isPrimitive}
             setIsPrimitive={setIsPrimitive}
           />
+          {/* HDR Environment Map — provides realistic reflections on ball surfaces */}
           {!isLowPower && <Environment preset="city" blur={0.5} />}
         </Suspense>
 
+        {/* ----- Post-Processing Pipeline ----- */}
+        {/* Only active in High Performance mode; stripped entirely in Compat mode */}
         {!isLowPower && (
           <EffectComposer disableNormalPass>
+            {/* Bloom: Soft glow on bright highlights (sun, specular reflections) */}
             <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.85} radius={0.5} />
+            {/* Noise: Subtle film grain for organic, non-digital feel */}
             <Noise opacity={0.02} />
+            {/* Vignette: Cinematic edge darkening — stronger in dark mode */}
             <Vignette eskil={false} offset={0.35} darkness={isDarkMode ? 0.65 : 0.38} />
           </EffectComposer>
         )}
       </Canvas>
+
+      {/* ----- Diagnostic Mode Label (visible only when wireframe is active) ----- */}
       {isPrimitive && (
         <div style={{ position: 'absolute', bottom: 20, right: 20, color: isDarkMode ? 'white' : 'black', opacity: 0.3, pointerEvents: 'none', fontSize: '10px', zIndex: 10 }}>
           {isLowPower ? 'High Compatibility Mode' : 'High Performance Mode'}

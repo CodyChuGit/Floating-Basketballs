@@ -1,3 +1,24 @@
+/* ============================================================================
+ * App.css — Global Styles and Loading Animation
+ * ============================================================================
+ *
+ * This stylesheet provides:
+ *   1. Light/Dark mode background theming (via CSS media queries)
+ *   2. Loading screen overlay and fade-out transitions
+ *   3. Bouncing ball animation for the loading indicator
+ *
+ * The background colors here MUST match the values used in:
+ *   - index.html <meta name="theme-color"> tags
+ *   - ManyBalls.jsx Canvas <color> and container div
+ *   - index.html inline <style> block
+ *
+ * ============================================================================ */
+
+
+/* ------ Light/Dark Mode Background ------ */
+/* These native CSS media queries ensure the background color is correct
+   even BEFORE React hydrates, preventing white flashes on iOS Safari. */
+
 html,
 body {
   background-color: #f0f0f0;
@@ -18,9 +39,18 @@ body {
   overflow: hidden;
 }
 
+
+/* ------ Canvas Sizing ------ */
+/* Force the WebGL canvas to fill the full viewport height */
+
 canvas {
   height: 100vh !important;
 }
+
+
+/* ------ Loading Ball Animation ------ */
+/* A smooth, infinite vertical bounce used by the loading indicator.
+   Uses CSS transforms for GPU-accelerated rendering (no layout thrashing). */
 
 @keyframes bounce {
 
@@ -41,6 +71,11 @@ canvas {
   filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.5));
   will-change: transform;
 }
+
+
+/* ------ Loader Overlay ------ */
+/* Full-screen overlay that sits above the 3D canvas while assets load.
+   Transitions to transparent over 1.5 seconds once loading completes. */
 
 .loader-overlay {
   position: absolute;
@@ -64,6 +99,10 @@ canvas {
   opacity: 0;
 }
 
+
+/* ------ Loader Content Container ------ */
+/* Centers the bouncing ball vertically and horizontally within the overlay. */
+
 .loader-container {
   display: flex;
   flex-direction: column;
@@ -71,22 +110,4 @@ canvas {
   justify-content: center;
   pointer-events: none;
   transition: opacity 1s ease-out;
-}
-
-.loader-container.content-visible {
-  opacity: 1;
-}
-
-.loader-container.content-hidden {
-  opacity: 0;
-}
-
-.loader-percentage {
-  font-family: 'Avenir Next', 'Avenir', 'Helvetica Neue', sans-serif;
-  font-size: 1.5rem;
-  font-weight: 300;
-  color: #fff;
-  font-variant-numeric: tabular-nums;
-  margin-top: 15px;
-  text-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
 }
