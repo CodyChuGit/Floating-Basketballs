@@ -4,7 +4,7 @@ This is a demo using three.js and react to build a interactive 3d website render
 
 
 View demo here:
-https://floatingbballdemo.netlify.app
+https://wilsonballs.netlify.app
 
 
 Special Thanks to the 3d asset creator:
