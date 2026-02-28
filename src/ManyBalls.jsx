@@ -327,20 +327,17 @@ function App() {
           shadow-bias={-0.001}
         />
 
-        {/* Visual Sun and Glow Sprite — positioned at the directional light source */}
+        {/* Visual Sun and Glow Sprite — positioned at the directional light source.
+             Uses meshBasicMaterial (not Standard) to avoid per-vertex PBR shading
+             discontinuities that get amplified by Bloom into visible green dots.
+             High segment count (64) ensures perfectly smooth bloom edges. */}
         <group position={[50, 100, 50]}>
           <mesh ref={sunRef}>
-            <sphereGeometry args={[5, isLowPower ? 8 : 16, isLowPower ? 8 : 16]} />
-            {isLowPower ? (
-              <meshBasicMaterial color="#ffffff" />
-            ) : (
-              <meshStandardMaterial
-                color="#ffffff"
-                emissive="#fff9e6"
-                emissiveIntensity={17}
-                toneMapped={false}
-              />
-            )}
+            <sphereGeometry args={[5, isLowPower ? 8 : 64, isLowPower ? 8 : 64]} />
+            <meshBasicMaterial
+              color="#fffaf0"
+              toneMapped={false}
+            />
           </mesh>
           {/* Additive-blended glow sprite — creates a soft halo around the sun */}
           {!isLowPower && (
