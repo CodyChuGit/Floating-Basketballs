@@ -163,11 +163,11 @@ function App() {
       {isIOS && (
         <>
           <div style={{
-            position: 'absolute', top: 0, left: 0, width: '100%', height: '20vh', pointerEvents: 'none', zIndex: 1,
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '10vh', pointerEvents: 'none', zIndex: 1,
             background: `linear-gradient(to bottom, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
           }} />
           <div style={{
-            position: 'absolute', bottom: 0, left: 0, width: '100%', height: '20vh', pointerEvents: 'none', zIndex: 1,
+            position: 'absolute', bottom: 0, left: 0, width: '100%', height: '10vh', pointerEvents: 'none', zIndex: 1,
             background: `linear-gradient(to top, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
           }} />
         </>
