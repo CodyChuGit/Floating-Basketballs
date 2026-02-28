@@ -243,8 +243,8 @@ function App() {
       >
         <color attach="background" args={[bg]} />
 
-        {/* Lighting rig */}
-        <ambientLight intensity={isLowPower ? 0.8 : 0.01} />
+        {/* Ambient fill light — reduced for deeper shadows */}
+        <ambientLight intensity={isLowPower ? 0.8 : 0.005} />
         <directionalLight position={[50, 100, 50]} intensity={isLowPower ? 0.4 : 1.0}
           castShadow={!isLowPower && effects.Shadows}
           shadow-mapSize={[1024, 1024]} shadow-camera-left={-70} shadow-camera-right={70}
@@ -268,12 +268,13 @@ function App() {
           )}
         </group>
 
-        <pointLight position={[-40, -40, -40]} intensity={0.12} color="#ffffff" />
-        {!isLowPower && <pointLight position={[40, 40, 80]} intensity={0.04} color="#ffeedd" />}
+        <pointLight position={[-40, -40, -40]} intensity={0.1} color="#ffffff" />
+        {/* Secondary accent light — dimmed for higher contrast */}
+        {!isLowPower && <pointLight position={[40, 40, 80]} intensity={0.02} color="#ffeedd" />}
 
         {/* Camera controls */}
         <OrbitControls enableZoom zoomSpeed={0.3} enablePan={false} enableRotate
-          rotateSpeed={0.3} autoRotate autoRotateSpeed={-0.64} minDistance={35} maxDistance={63} />
+          rotateSpeed={0.24} autoRotate autoRotateSpeed={-0.51} minDistance={35} maxDistance={63} />
 
         <Suspense fallback={null}>
           <Basketballs count={isLowPower ? 40 : 80} isPrimitive={isPrimitive} isDarkMode={isDarkMode} />
@@ -284,7 +285,7 @@ function App() {
         {!isLowPower && (effects.Bloom || effects.Noise || effects.Vignette) && (
           <EffectComposer disableNormalPass multisampling={4}>
             {effects.Bloom && <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.85} radius={0.5} />}
-            {effects.Noise && <Noise opacity={0.02} />}
+            {effects.Noise && <Noise opacity={0.03} />}
             {effects.Vignette && <Vignette eskil={false} offset={0.35} darkness={isDarkMode ? 0.65 : 0.38} />}
           </EffectComposer>
         )}
