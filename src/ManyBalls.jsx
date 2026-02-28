@@ -159,7 +159,19 @@ function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: isDarkMode ? '#020202' : '#f0f0f0', position: 'relative', overflow: 'hidden' }}>
       <Loader isDarkMode={isDarkMode} />
-      {/* CSS Edge Fades removed in favor of regular Vignette */}
+      {/* CSS Edge Fades for infinite seamless blending with Safari OS Chrome, exclusively for Mobile iOS */}
+      {isIOS && (
+        <>
+          <div style={{
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '20vh', pointerEvents: 'none', zIndex: 1,
+            background: `linear-gradient(to bottom, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
+          }} />
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, width: '100%', height: '20vh', pointerEvents: 'none', zIndex: 1,
+            background: `linear-gradient(to top, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
+          }} />
+        </>
+      )}
       <Canvas
         dpr={[1, isSafari ? 1.0 : 1.5]}
         shadows="soft"
