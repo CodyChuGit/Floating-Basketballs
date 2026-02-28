@@ -24,7 +24,7 @@ function Loader({ isDarkMode }) {
   return (
     <div className={`loader-overlay ${isFading ? 'overlay-hidden' : 'overlay-visible'}`} style={{ backgroundColor: isDarkMode ? '#050505' : '#ffffff' }}>
       <div className="loader-container">
-        <img src="/loading-ball.png" alt="Loading..." className="bouncing-ball" />
+        <img src="/loading-ball.webp" alt="Loading..." className="bouncing-ball" />
       </div>
     </div>
   )
@@ -42,7 +42,7 @@ function Basketballs({ count = 80, lowPower = false, isPrimitive, setIsPrimitive
       if (material.map) material.map.anisotropy = gl.capabilities.getMaxAnisotropy()
       if (material.normalMap) {
         material.normalMap.anisotropy = gl.capabilities.getMaxAnisotropy()
-        material.normalScale.set(0.5, 0.5)
+        material.normalScale.set(0.7, 0.7)
       }
       if (material.roughnessMap) material.roughnessMap.anisotropy = gl.capabilities.getMaxAnisotropy()
     })
@@ -233,7 +233,7 @@ function App() {
           <EffectComposer disableNormalPass>
             <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.85} radius={0.5} />
             <Noise opacity={0.02} />
-            <Vignette eskil={false} offset={0.35} darkness={isDarkMode ? 0.65 : 0.54} />
+            <Vignette eskil={false} offset={0.35} darkness={isDarkMode ? 0.65 : 0.38} />
           </EffectComposer>
         )}
       </Canvas>
