@@ -164,11 +164,11 @@ function App() {
         <>
           <div style={{
             position: 'absolute', top: 0, left: 0, width: '100%', height: '10vh', pointerEvents: 'none', zIndex: 1,
-            background: `linear-gradient(to bottom, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
+            background: `linear-gradient(to bottom, ${isDarkMode ? '#020202 0%, #020202 60%, transparent 100%' : '#f0f0f0 0%, #f0f0f0 60%, transparent 100%'})`
           }} />
           <div style={{
             position: 'absolute', bottom: 0, left: 0, width: '100%', height: '10vh', pointerEvents: 'none', zIndex: 1,
-            background: `linear-gradient(to top, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
+            background: `linear-gradient(to top, ${isDarkMode ? '#020202 0%, #020202 60%, transparent 100%' : '#f0f0f0 0%, #f0f0f0 60%, transparent 100%'})`
           }} />
         </>
       )}
