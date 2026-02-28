@@ -126,15 +126,15 @@ function App() {
   const [effectIdx, setEffectIdx] = useState(0)
   const [showEffectsHUD, setShowEffectsHUD] = useState(false)
 
-  // Dark Mode scales illumination to 2.5x to compensate for lack of Environment map
-  const modeMult = isDarkMode ? 2.5 : 1.0
-
   // Theme — follows OS preference unless user presses "L" to override
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (window.matchMedia) return window.matchMedia('(prefers-color-scheme: dark)').matches
     return true
   })
   const [themeOverride, setThemeOverride] = useState(false)
+
+  // Dark Mode scales illumination to 2.5x to compensate for lack of Environment map
+  const modeMult = isDarkMode ? 2.5 : 1.0
 
   useEffect(() => {
     if (themeOverride) return
