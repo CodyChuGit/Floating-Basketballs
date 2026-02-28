@@ -211,7 +211,6 @@ function App() {
         {!isLowPower && (
           <EffectComposer disableNormalPass>
             <Bloom luminanceThreshold={1.2} mipmapBlur intensity={1.0} radius={0.5} />
-            <Noise opacity={0.02} />
             <Vignette eskil={false} offset={0.35} darkness={isDarkMode ? 0.65 : 0.54} />
           </EffectComposer>
         )}
