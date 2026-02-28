@@ -82,15 +82,15 @@ The engine processes the particle array `particles[]` containing `position`, `ve
 
 **Pass 1: Unified Pair Loop (O(n²))**
 Iterates every unique pair `i` and `j > i`.
-1. Calculates `distSq = p1.pos.distanceToSquared(p2.pos)`.
+1. Calculates distances using unrolled scalar math (e.g. `const dx = p1.pos.x - p2.pos.x`) for V8 engine speed.
 2. If `distSq > AURA_RADIUS_SQ`, `continue` (no interaction).
-3. If `distSq < MIN_DIST_SQ`, an overlapping **Hard Collision** has occurred. The distance is normalized (`sqrt` is evaluated here). Balls are forcefully pushed out of each other (Position correction = `55%` of penetration depth each). An impulse is applied to velocities using the dot product of their relative velocity and the normalized axis.
+3. If `distSq < MIN_DIST_SQ`, an overlapping **Hard Collision** has occurred. The overlapping pair is pushed into a `collidingPairs` array cache for Pass 2. The distance is normalized (`sqrt` is evaluated here). Balls are forcefully pushed out of each other (Position correction = `55%` of penetration depth each). An impulse is applied to velocities using the dot product of their relative velocity and the normalized axis.
 4. If distance is between Hard and Aura, a **Soft Repulsion** applies. A quadratic falloff equation applies a gentle velocity push.
 5. Handles boundary containment (balls crossing `BOUNDARY_RADIUS` are pushed back and velocity inverted).
 6. Handles Camera forcefield (balls closer to `cameraPosition` than `CAMERA_SAFE_RADIUS` are pushed away).
 
 **Pass 2: Iterative Solver**
-Loops `SOLVER_ITERATIONS` times over the entire set, re-evaluating *only* Hard Collisions, Boundary, and Camera constraints. This prevents overlapping "clumps" of balls where moving A pushes B into C.
+Loops `SOLVER_ITERATIONS` times over the `collidingPairs` array cached in Pass 1, re-evaluating *only* the specific pairs currently touching, rather than re-evaluating the entire O(n²) dataset. This eliminates ~38,000 redundant distance calculations per frame. Globals (Boundary and Camera) are also re-enforced here.
 
 **Pass 3: Integration**
 1. Each ball's `velocity` is multiplied by `dampingFactor`.
@@ -105,3 +105,10 @@ Calculates the Total Kinetic Energy (sum of all `velocity.lengthSq()`). If the s
 - **Scene Orbit:** Utilizes Drei's `<OrbitControls>` configured to auto-rotate outward, with pan disabled, zoom bounded (`minDistance=35`, `maxDistance=63`), and damping enabled.
 - **Native Loading:** The `index.html` inline `<style>` and `div#preloader` contain a CSS-animated `loading-ball.webp` that renders instantly. The `Loader` component hooks into WebGL asset progress and removes the HTML element when WebGL is fully hydrated, avoiding any white flash.
 - **Mode-Specific Lighting:** The `<Environment />` component (city preset) is active in both themes. Dark Mode uses `environmentIntensity: 0.06` (6%) for subtle reflections. Light Mode uses `environmentIntensity: 0.4` (40%). All other lighting values are explicitly defined per-theme in the component's JSX without runtime scaling multipliers.
+
+## 7. Performance Optimizations
+
+- **Asset Compression:** The 3D model textures were converted from JPEG to 1024x1024 WebP format, reducing the texture payload bandwidth and VRAM usage by over 50% (444KB to 204KB) without sacrificing visual fidelity.
+- **Vite Bundle Splitting:** Rollup `manualChunks` configuration isolates the heavy Three.js and React vendor dependencies into dedicated chunk files. This shrinks the core application JS bundle from 1.1MB to ~13KB, allowing the browser to parallelize downloads and drastically improving Time-to-Interactive.
+- **Scalar Math Unrolling:** The hot-path physics loops eschew `THREE.Vector3` function calls (like `copy`, `sub`, `distanceToSquared`, `addScaledVector`) in favor of direct scalar math (`p.x += dx * t`). This eliminates thousands of redundant object allocations and function call overheads per frame, heavily optimizing memory garbage collection.
+

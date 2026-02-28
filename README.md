@@ -38,18 +38,19 @@ index.html          Inline preloader (renders before JS, zero-dependency)
 ```
 
 ### Physics Pipeline (per frame)
-1. **Unified pair loop** — Soft aura repulsion + hard collision in one O(n²) sweep
-2. **Iterative solver** — 6 refinement passes for stability in dense clusters
+1. **Unified pair loop** — Soft aura repulsion + hard collision in one O(n²) sweep. Overlapping pairs are cached for Pass 2.
+2. **Iterative solver** — 6 refinement passes re-evaluate *only* the specific pairs cached in Pass 1, avoiding $O(n^2)$ redundant checks.
 3. **Integration** — Velocity damping, speed clamping, position update
 4. **Idle diffusion** — Gentle mutual repulsion when kinetic energy drops, filling the volume evenly
 
 ### Performance Optimizations
-- `distanceToSquared()` for all hot-path checks (sqrt only on confirmed interaction)
-- Precomputed squared thresholds in constructor (not per-frame)
-- Manual vector normalization reusing already-computed distance
-- `InstancedMesh` for 80 balls on a single draw call
-- `THREE.Cache.enabled` + explicit `dispose()` on all GPU resources
-- EffectComposer `multisampling={4}` with native WebGL antialiasing
+- **Scalar Math Unrolling:** Eliminated `THREE.Vector3` function-call overhead in the physics hot-paths in favor of raw scalar math (`dx = p.x - p2.x`), preventing thousands of object allocations per frame.
+- **Pass 1 Collision Caching:** Eliminates ~38,000 redundant distance calculations per frame by caching touching pairs for the iterative solver.
+- **Vite Bundle Splitting:** `manualChunks` isolate the monolithic Three.js and React vendor dependencies into dedicated parallel-loading files, shrinking the core app logic to `~13KB` and drastically accelerating boot time.
+- **Asset Compression:** 3D model textures were converted to WebP, slashing payload bandwidth by >50% while preserving 1024x1024 resolution.
+- `InstancedMesh` for 80 balls on a single draw call.
+- `THREE.Cache.enabled` + explicit `dispose()` on all GPU resources.
+- EffectComposer `multisampling={4}` with native WebGL antialiasing.
 
 ## 🛠️ Tech Stack
 
