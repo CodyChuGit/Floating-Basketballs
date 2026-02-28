@@ -16,10 +16,10 @@
 [[headers]]
   for = "/*"
   [headers.values]
-    # Content-Security-Policy: Only allow resources from the same origin.
-    # 'unsafe-inline' is required for the inline <style> in index.html and
-    # React's runtime style injection. blob: is needed for Three.js workers.
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ws:; worker-src 'self' blob:; child-src 'self' blob:"
+    # Content-Security-Policy: Allow local scripts, styles, and data.
+    # 'unsafe-inline' is required for Vite's HMR scripts and our preloader CSS.
+    # ws: and wss: are allowed for HMR WebSockets.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ws: wss:; worker-src 'self' blob:; child-src 'self' blob:"
 
     # Prevent the site from being embedded in iframes (clickjacking protection)
     X-Frame-Options = "DENY"
