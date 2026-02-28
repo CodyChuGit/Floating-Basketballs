@@ -2,7 +2,7 @@ import { useMemo, Suspense, useRef, useState, useEffect } from 'react'
 import './App.css'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Environment, OrbitControls, useGLTF, Html, useProgress } from '@react-three/drei'
-import { Bloom, Noise, Vignette, EffectComposer } from '@react-three/postprocessing'
+import { Bloom, Noise, EffectComposer } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { PhysicsSimulator } from './physics.js'
 
@@ -114,6 +114,11 @@ function App() {
     return ua.includes('Safari') && !ua.includes('Chrome') && !ua.includes('Chromium')
   }, [])
 
+  const isIOS = useMemo(() => {
+    const ua = navigator.userAgent
+    return /iPad|iPhone|iPod/.test(ua) || (ua.includes("Mac") && "ontouchend" in document)
+  }, [])
+
   const [isPrimitive, setIsPrimitive] = useState(isLowPower)
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -124,8 +129,14 @@ function App() {
   })
 
   useEffect(() => {
+    document.documentElement.style.setProperty('--dynamic-bg', isDarkMode ? '#020202' : '#f0f0f0')
+
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const handleChange = (e) => setIsDarkMode(e.matches)
+    const handleChange = (e) => {
+      setIsDarkMode(e.matches)
+      document.documentElement.style.setProperty('--dynamic-bg', e.matches ? '#020202' : '#f0f0f0')
+    }
+
     if (mediaQuery.addEventListener) {
       mediaQuery.addEventListener('change', handleChange)
       return () => mediaQuery.removeEventListener('change', handleChange)
@@ -133,7 +144,7 @@ function App() {
       mediaQuery.addListener(handleChange)
       return () => mediaQuery.removeListener(handleChange)
     }
-  }, [])
+  }, [isDarkMode])
 
   // Procedural gradient glow for the sun
   const glowTexture = useMemo(() => {
@@ -154,12 +165,19 @@ function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: isDarkMode ? '#020202' : '#f0f0f0', position: 'relative', overflow: 'hidden' }}>
       <Loader isDarkMode={isDarkMode} />
-      {/* CSS Edge Fade for infinite seamless blending with Safari OS Chrome */}
-      <div style={{
-        position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1,
-        boxShadow: isDarkMode ? 'inset 0 0 100px 30px #020202' : 'inset 0 0 100px 30px #f0f0f0'
-      }}
-      />
+      {/* CSS Edge Fades for infinite seamless blending with Safari OS Chrome, exclusively for Mobile iOS */}
+      {isIOS && (
+        <>
+          <div style={{
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '15vh', pointerEvents: 'none', zIndex: 1,
+            background: `linear-gradient(to bottom, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
+          }} />
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, width: '100%', height: '15vh', pointerEvents: 'none', zIndex: 1,
+            background: `linear-gradient(to top, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
+          }} />
+        </>
+      )}
       <Canvas
         dpr={[1, isSafari ? 1.0 : 1.5]}
         shadows="soft"
@@ -239,7 +257,6 @@ function App() {
           <EffectComposer disableNormalPass>
             <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.85} radius={0.5} />
             <Noise opacity={0.02} />
-            <Vignette eskil={false} offset={0.35} darkness={isDarkMode ? 0.75 : 0.45} />
           </EffectComposer>
         )}
       </Canvas>
