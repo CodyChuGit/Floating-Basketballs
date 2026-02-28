@@ -14,8 +14,8 @@ import { PhysicsSimulator } from './physics.js'
 THREE.Cache.enabled = true // reuse decoded textures across mounts
 
 // Effects that can be cycled via "O" key (order matters)
-const EFFECT_NAMES = ['Bloom', 'Noise', 'Vignette', 'Shadows', 'Environment']
-const ALL_EFFECTS_ON = { Bloom: true, Noise: true, Vignette: true, Shadows: true, Environment: true }
+const EFFECT_NAMES = ['Environment', 'Noise', 'Shadows', 'Vignette', 'Bloom']
+const ALL_EFFECTS_ON = { Environment: true, Noise: true, Shadows: true, Vignette: true, Bloom: true }
 
 // --- Loader ---
 // Bridges the native HTML #preloader (visible before JS loads) with React's
@@ -125,6 +125,9 @@ function App() {
   const [effects, setEffects] = useState(ALL_EFFECTS_ON)
   const [effectIdx, setEffectIdx] = useState(0)
   const [showEffectsHUD, setShowEffectsHUD] = useState(false)
+
+  // Dark Mode scales illumination to 2.5x to compensate for lack of Environment map
+  const modeMult = isDarkMode ? 2.5 : 1.0
 
   // Theme — follows OS preference unless user presses "L" to override
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -243,12 +246,12 @@ function App() {
       >
         <color attach="background" args={[bg]} />
 
-        {/* Ambient fill light — reduced for deeper shadows */}
-        <ambientLight intensity={isLowPower ? 0.8 : 0.005} />
-        <directionalLight position={[50, 100, 50]} intensity={isLowPower ? 0.4 : 1.0}
+        {/* Ambient fill light — boosted in Dark Mode to replace Environment bounce */}
+        <ambientLight intensity={(isLowPower ? 0.8 : 0.005) * modeMult} />
+        <directionalLight position={[50, 100, 50]} intensity={(isLowPower ? 0.4 : 1.0) * modeMult}
           castShadow={!isLowPower && effects.Shadows}
-          shadow-mapSize={[1024, 1024]} shadow-camera-left={-70} shadow-camera-right={70}
-          shadow-camera-top={70} shadow-camera-bottom={-70} shadow-bias={-0.001} />
+          shadow-mapSize={[2048, 2048]} shadow-camera-left={-55} shadow-camera-right={55}
+          shadow-camera-top={55} shadow-camera-bottom={-55} shadow-bias={-0.0005} />
 
         {/* Sun mesh + additive glow sprite */}
         <group position={[50, 100, 50]}>
@@ -268,9 +271,9 @@ function App() {
           )}
         </group>
 
-        <pointLight position={[-40, -40, -40]} intensity={0.1} color="#ffffff" />
-        {/* Secondary accent light — dimmed for higher contrast */}
-        {!isLowPower && <pointLight position={[40, 40, 80]} intensity={0.02} color="#ffeedd" />}
+        <pointLight position={[-40, -40, -40]} intensity={0.1 * modeMult} color="#ffffff" />
+        {/* Secondary accent light — boosted in Dark Mode */}
+        {!isLowPower && <pointLight position={[40, 40, 80]} intensity={0.02 * modeMult} color="#ffeedd" />}
 
         {/* Camera controls */}
         <OrbitControls enableZoom zoomSpeed={0.3} enablePan={false} enableRotate
@@ -278,7 +281,8 @@ function App() {
 
         <Suspense fallback={null}>
           <Basketballs count={isLowPower ? 40 : 80} isPrimitive={isPrimitive} isDarkMode={isDarkMode} />
-          {!isLowPower && effects.Environment && <Environment preset="city" blur={0.5} />}
+          {/* Environment only enabled in Light Mode; Dark Mode uses 2.5x light multiplier instead */}
+          {!isLowPower && !isDarkMode && effects.Environment && <Environment preset="city" blur={0.5} />}
         </Suspense>
 
         {/* Post-processing — only in high-perf mode, each effect individually toggleable */}

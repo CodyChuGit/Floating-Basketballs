@@ -29,7 +29,7 @@ The `App` component acts as the root orchestrator. It manages the following stat
 - **Performance Mode (`isLowPower`):** Boolean. Defaults to `true` if `?compat` is in URL or WebGL is missing. Toggled via the **"M"** key.
 - **Wireframe Mode (`isPrimitive`):** Boolean. Defaults to `isLowPower`. Toggled via the **"P"** key.
 - **Dark Mode (`isDarkMode`):** Boolean. Initialized via `window.matchMedia('(prefers-color-scheme: dark)')`. Listens to OS changes unless manually overridden via the **"L"** key (which sets `themeOverride` to true).
-- **Effects State (`effects`):** Object mapping `['Bloom', 'Noise', 'Vignette', 'Shadows', 'Environment']` to booleans. Toggled iteratively via the **"O"** key, cycling through disabling each effect before re-enabling all.
+- **Effects State (`effects`):** Object mapping `['Environment', 'Noise', 'Shadows', 'Vignette', 'Bloom']` to booleans. Toggled iteratively via the **"O"** key, cycling through disabling each effect before re-enabling all.
 - **Browser/Device Detection:**
     - `isSafari`: Caps Canvas `dpr` to `1.0` (instead of `1.5`) due to Safari Retina fragment shader throttling.
     - `isIOS`: Renders top/bottom CSS `linear-gradient` overlays matching the background color to blend the Canvas into Safari's browser chrome.
@@ -39,9 +39,11 @@ The `App` component acts as the root orchestrator. It manages the following stat
 The `<Canvas>` setup utilizes strict WebGL parameters to optimize memory:
 - `gl={{ antialias: true, powerPreference: isLowPower ? 'low-power' : 'high-performance', preserveDrawingBuffer: false, stencil: false, depth: true }}`
 - **Lighting Rig:**
-    - `ambientLight` (Intensity: `0.01` high-perf, `0.8` compat).
-    - `directionalLight` (The "sun", `[50,100,50]`). Casts soft shadows on a `1024x1024` map if high-perf.
-    - Two `pointLight`s for back-fill and rim lighting.
+    - `ambientLight` (Intensity: `(0.005 mid / 0.8 low) * modeMult`).
+    - `directionalLight` (Intensity: `(1.0 mid / 0.4 low) * modeMult`).
+    - `pointLight` x2 (Base: `0.1` and `0.02`, scaled by `modeMult`).
+    - `modeMult` — set to `2.5` in Dark Mode to compensate for the disabled Environment map; `1.0` in Light Mode.
+    - Shadows: `2048x2048` map with a tight `+/- 55` unit frustum in high-perf.
 - **Visual Sun:** A sphere mesh with an `emissive` material (`intensity: 17`). In high-perf, it is overlaid with a `<Billboard>` containing a custom `THREE.ShaderMaterial`. This procedural shader calculates a mathematically perfect radial gradient in 32-bit float precision per-pixel on the GPU, avoiding the color banding and dithering artifacts inherent to 8-bit Canvas Textures. It also injects a microscopic high-frequency noise dither (`fract(sin(...) * ...)`) to guarantee flawless visual falloff on consumer monitors, specifically eliminating the "stippling" dots visible on pitch-black backgrounds.
 - **Postprocessing:** `EffectComposer` is wrapped in an `if (!isLowPower)`. The composer uses `multisampling={4}` and `disableNormalPass` to save memory. Effects included: `Bloom` (threshold 1.2), `Noise` (opacity 0.02), `Vignette` (darkness adjusts dynamically based on `isDarkMode`).
 
@@ -100,3 +102,4 @@ Calculates the Total Kinetic Energy (sum of all `velocity.lengthSq()`). If the s
 
 - **Scene Orbit:** Utilizes Drei's `<OrbitControls>` configured to auto-rotate outward, with pan disabled, zoom bounded (`minDistance=35`, `maxDistance=63`), and damping enabled.
 - **Native Loading:** The `index.html` inline `<style>` and `div#preloader` contain a CSS-animated `loading-ball.webp` that renders instantly. The `Loader` component hooks into WebGL asset progress and removes the HTML element when WebGL is fully hydrated, avoiding any white flash.
+- **Mode-Specific Lighting:** To maintain visual clarity without a global reflection map, Dark Mode disables the `<Environment />` component and boosts all manual light intensities by `2.5x`. Light Mode retains the environment map and baseline `1.0x` intensities.
