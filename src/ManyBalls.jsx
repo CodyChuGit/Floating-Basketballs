@@ -152,8 +152,14 @@ function App() {
   }, [])
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: isDarkMode ? '#050505' : '#ffffff', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ width: '100vw', height: '100vh', background: isDarkMode ? '#020202' : '#f0f0f0', position: 'relative', overflow: 'hidden' }}>
       <Loader isDarkMode={isDarkMode} />
+      {/* CSS Edge Fade for infinite seamless blending with Safari OS Chrome */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1,
+        boxShadow: isDarkMode ? 'inset 0 0 100px 30px #020202' : 'inset 0 0 100px 30px #f0f0f0'
+      }}
+      />
       <Canvas
         dpr={[1, isSafari ? 1.0 : 1.5]}
         shadows="soft"
@@ -233,12 +239,12 @@ function App() {
           <EffectComposer disableNormalPass>
             <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.85} radius={0.5} />
             <Noise opacity={0.02} />
-            <Vignette eskil={false} offset={0.35} darkness={isDarkMode ? 0.65 : 0.38} />
+            <Vignette eskil={false} offset={0.35} darkness={isDarkMode ? 0.75 : 0.45} />
           </EffectComposer>
         )}
       </Canvas>
       {isPrimitive && (
-        <div style={{ position: 'absolute', bottom: 20, right: 20, color: isDarkMode ? 'white' : 'black', opacity: 0.3, pointerEvents: 'none', fontSize: '10px' }}>
+        <div style={{ position: 'absolute', bottom: 20, right: 20, color: isDarkMode ? 'white' : 'black', opacity: 0.3, pointerEvents: 'none', fontSize: '10px', zIndex: 10 }}>
           {isLowPower ? 'High Compatibility Mode' : 'High Performance Mode'}
         </div>
       )}
