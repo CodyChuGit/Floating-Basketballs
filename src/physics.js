@@ -35,6 +35,7 @@ export class PhysicsSimulator {
         this.cameraSafeRadiusSq = CAMERA_SAFE_RADIUS * CAMERA_SAFE_RADIUS
 
         this.particles = []
+        this.collidingPairs = [] // Caches pairs that actually touch during Pass 1
         this.tempVec = new THREE.Vector3() // reusable scratch vector (zero GC pressure)
         this.initParticles()
     }
@@ -71,8 +72,12 @@ export class PhysicsSimulator {
 
     // Advance one frame. cameraPosition must be in InstancedMesh local space.
     step(cameraPosition) {
+        // Pre-extract camera xyz to avoid .x .y .z property access overhead in the loop
+        const cx = cameraPosition.x, cy = cameraPosition.y, cz = cameraPosition.z
+
         for (let step = 0; step < SUB_STEPS; step++) {
             let totalKE = 0
+            this.collidingPairs.length = 0 // Fast clear
 
             // --- PASS 1: Unified pair loop (aura + hard collisions in one O(n²) sweep) ---
             for (let i = 0; i < this.count; i++) {
@@ -81,98 +86,205 @@ export class PhysicsSimulator {
 
                 for (let j = i + 1; j < this.count; j++) {
                     const p2 = this.particles[j]
-                    const distSq = p.position.distanceToSquared(p2.position)
+
+                    // Unrolled scalar math for distance
+                    const dx = p.position.x - p2.position.x
+                    const dy = p.position.y - p2.position.y
+                    const dz = p.position.z - p2.position.z
+                    const distSq = dx * dx + dy * dy + dz * dz
+
                     if (distSq >= this.AURA_RADIUS_SQ || distSq < 0.000001) continue
 
                     const dist = Math.sqrt(distSq)
-                    // Manual normalize: reuse dist to skip redundant sqrt
-                    this.tempVec.copy(p.position).sub(p2.position)
-                    this.tempVec.x /= dist
-                    this.tempVec.y /= dist
-                    this.tempVec.z /= dist
+                    const invDist = 1.0 / dist
+                    const nx = dx * invDist
+                    const ny = dy * invDist
+                    const nz = dz * invDist
 
                     if (dist < this.MIN_DIST) {
+                        // Cache touching pair for iterative solver
+                        this.collidingPairs.push(p, p2)
+
                         // Hard collision — 55% overcorrection prevents persistent contact
                         const correction = (this.MIN_DIST - dist) * 0.55
-                        p.position.addScaledVector(this.tempVec, correction)
-                        p2.position.addScaledVector(this.tempVec, -correction)
-                        const relVel = p.velocity.dot(this.tempVec) - p2.velocity.dot(this.tempVec)
+                        p.position.x += nx * correction
+                        p.position.y += ny * correction
+                        p.position.z += nz * correction
+                        p2.position.x -= nx * correction
+                        p2.position.y -= ny * correction
+                        p2.position.z -= nz * correction
+
+                        const relVel = (p.velocity.x * nx + p.velocity.y * ny + p.velocity.z * nz) -
+                            (p2.velocity.x * nx + p2.velocity.y * ny + p2.velocity.z * nz)
+
                         if (relVel < 0) {
                             const impulse = Math.max(0.005 / SUB_STEPS, -relVel * (1 + RESTITUTION)) * 0.5
-                            p.velocity.addScaledVector(this.tempVec, impulse)
-                            p2.velocity.addScaledVector(this.tempVec, -impulse)
+                            p.velocity.x += nx * impulse
+                            p.velocity.y += ny * impulse
+                            p.velocity.z += nz * impulse
+                            p2.velocity.x -= nx * impulse
+                            p2.velocity.y -= ny * impulse
+                            p2.velocity.z -= nz * impulse
                         }
                     } else {
                         // Soft aura — quadratic push prevents future collisions
                         const t = (this.AURA_RADIUS - dist) / this.AURA_RADIUS
                         const pushForce = t * t * 0.01 / SUB_STEPS
-                        p.velocity.addScaledVector(this.tempVec, pushForce)
-                        p2.velocity.addScaledVector(this.tempVec, -pushForce)
+                        p.velocity.x += nx * pushForce
+                        p.velocity.y += ny * pushForce
+                        p.velocity.z += nz * pushForce
+                        p2.velocity.x -= nx * pushForce
+                        p2.velocity.y -= ny * pushForce
+                        p2.velocity.z -= nz * pushForce
                     }
                 }
 
                 // Boundary containment
-                const distFromCenterSq = p.position.lengthSq()
+                const distFromCenterSq = p.position.x * p.position.x + p.position.y * p.position.y + p.position.z * p.position.z
                 if (distFromCenterSq > this.edgeDistSq) {
-                    this.tempVec.copy(p.position).normalize()
-                    const dot = p.velocity.dot(this.tempVec)
-                    if (dot > 0) p.velocity.addScaledVector(this.tempVec, -dot * 1.8)
-                    p.position.setLength(this.edgeDist)
+                    const distFromCenter = Math.sqrt(distFromCenterSq)
+                    const nx = p.position.x / distFromCenter
+                    const ny = p.position.y / distFromCenter
+                    const nz = p.position.z / distFromCenter
+
+                    const dot = p.velocity.x * nx + p.velocity.y * ny + p.velocity.z * nz
+                    if (dot > 0) {
+                        p.velocity.x -= nx * dot * 1.8
+                        p.velocity.y -= ny * dot * 1.8
+                        p.velocity.z -= nz * dot * 1.8
+                    }
+
+                    // Set exactly to boundary edge
+                    const scale = this.edgeDist / distFromCenter
+                    p.position.x *= scale
+                    p.position.y *= scale
+                    p.position.z *= scale
                 }
 
                 // Camera forcefield — invisible sphere that ejects balls
-                const distToCamSq = p.position.distanceToSquared(cameraPosition)
+                const cdx = p.position.x - cx
+                const cdy = p.position.y - cy
+                const cdz = p.position.z - cz
+                const distToCamSq = cdx * cdx + cdy * cdy + cdz * cdz
+
                 if (distToCamSq < this.cameraSafeRadiusSq) {
                     const distToCam = Math.sqrt(distToCamSq)
-                    this.tempVec.copy(p.position).sub(cameraPosition).normalize()
-                    p.position.addScaledVector(this.tempVec, CAMERA_SAFE_RADIUS - distToCam)
-                    const dot = p.velocity.dot(this.tempVec)
-                    if (dot < 0) p.velocity.addScaledVector(this.tempVec, -dot * 1.5)
-                    p.velocity.addScaledVector(this.tempVec, 0.05)
+                    const invDist = 1.0 / distToCam
+                    const nx = cdx * invDist
+                    const ny = cdy * invDist
+                    const nz = cdz * invDist
+
+                    const correction = CAMERA_SAFE_RADIUS - distToCam
+                    p.position.x += nx * correction
+                    p.position.y += ny * correction
+                    p.position.z += nz * correction
+
+                    const dot = p.velocity.x * nx + p.velocity.y * ny + p.velocity.z * nz
+                    if (dot < 0) {
+                        p.velocity.x -= nx * dot * 1.5
+                        p.velocity.y -= ny * dot * 1.5
+                        p.velocity.z -= nz * dot * 1.5
+                    }
+                    p.velocity.x += nx * 0.05
+                    p.velocity.y += ny * 0.05
+                    p.velocity.z += nz * 0.05
                 }
             }
 
-            // --- PASS 2: Iterative solver (hard collisions + boundary + camera only) ---
+            // --- PASS 2: Iterative solver (iterate ONLY over touching pairs cached in Pass 1) ---
             for (let iter = 1; iter < SOLVER_ITERATIONS; iter++) {
-                for (let i = 0; i < this.count; i++) {
-                    const p = this.particles[i]
-                    for (let j = i + 1; j < this.count; j++) {
-                        const p2 = this.particles[j]
-                        const distSq = p.position.distanceToSquared(p2.position)
-                        if (distSq < this.MIN_DIST_SQ && distSq > 0.000001) {
-                            const dist = Math.sqrt(distSq)
-                            this.tempVec.copy(p.position).sub(p2.position)
-                            this.tempVec.x /= dist
-                            this.tempVec.y /= dist
-                            this.tempVec.z /= dist
-                            const correction = (this.MIN_DIST - dist) * 0.55
-                            p.position.addScaledVector(this.tempVec, correction)
-                            p2.position.addScaledVector(this.tempVec, -correction)
-                            const relVel = p.velocity.dot(this.tempVec) - p2.velocity.dot(this.tempVec)
-                            if (relVel < 0) {
-                                const impulse = Math.max(0.005 / SUB_STEPS, -relVel * (1 + RESTITUTION)) * 0.5
-                                p.velocity.addScaledVector(this.tempVec, impulse)
-                                p2.velocity.addScaledVector(this.tempVec, -impulse)
-                            }
+                // Resolve collisions for cached pairs O(k) instead of O(N^2)
+                for (let k = 0; k < this.collidingPairs.length; k += 2) {
+                    const p = this.collidingPairs[k]
+                    const p2 = this.collidingPairs[k + 1]
+
+                    const dx = p.position.x - p2.position.x
+                    const dy = p.position.y - p2.position.y
+                    const dz = p.position.z - p2.position.z
+                    const distSq = dx * dx + dy * dy + dz * dz
+
+                    if (distSq < this.MIN_DIST_SQ && distSq > 0.000001) {
+                        const dist = Math.sqrt(distSq)
+                        const invDist = 1.0 / dist
+                        const nx = dx * invDist
+                        const ny = dy * invDist
+                        const nz = dz * invDist
+
+                        const correction = (this.MIN_DIST - dist) * 0.55
+                        p.position.x += nx * correction
+                        p.position.y += ny * correction
+                        p.position.z += nz * correction
+                        p2.position.x -= nx * correction
+                        p2.position.y -= ny * correction
+                        p2.position.z -= nz * correction
+
+                        const relVel = (p.velocity.x * nx + p.velocity.y * ny + p.velocity.z * nz) -
+                            (p2.velocity.x * nx + p2.velocity.y * ny + p2.velocity.z * nz)
+
+                        if (relVel < 0) {
+                            const impulse = Math.max(0.005 / SUB_STEPS, -relVel * (1 + RESTITUTION)) * 0.5
+                            p.velocity.x += nx * impulse
+                            p.velocity.y += ny * impulse
+                            p.velocity.z += nz * impulse
+                            p2.velocity.x -= nx * impulse
+                            p2.velocity.y -= ny * impulse
+                            p2.velocity.z -= nz * impulse
                         }
                     }
-                    // Re-enforce boundary
-                    const distFromCenterSq = p.position.lengthSq()
+                }
+
+                // Re-enforce global constraints for all particles
+                for (let i = 0; i < this.count; i++) {
+                    const p = this.particles[i]
+
+                    // Boundary
+                    const distFromCenterSq = p.position.x * p.position.x + p.position.y * p.position.y + p.position.z * p.position.z
                     if (distFromCenterSq > this.edgeDistSq) {
-                        this.tempVec.copy(p.position).normalize()
-                        const dot = p.velocity.dot(this.tempVec)
-                        if (dot > 0) p.velocity.addScaledVector(this.tempVec, -dot * 1.8)
-                        p.position.setLength(this.edgeDist)
+                        const distFromCenter = Math.sqrt(distFromCenterSq)
+                        const nx = p.position.x / distFromCenter
+                        const ny = p.position.y / distFromCenter
+                        const nz = p.position.z / distFromCenter
+
+                        const dot = p.velocity.x * nx + p.velocity.y * ny + p.velocity.z * nz
+                        if (dot > 0) {
+                            p.velocity.x -= nx * dot * 1.8
+                            p.velocity.y -= ny * dot * 1.8
+                            p.velocity.z -= nz * dot * 1.8
+                        }
+
+                        const scale = this.edgeDist / distFromCenter
+                        p.position.x *= scale
+                        p.position.y *= scale
+                        p.position.z *= scale
                     }
-                    // Re-enforce camera forcefield
-                    const distToCamSq = p.position.distanceToSquared(cameraPosition)
+
+                    // Camera forcefield
+                    const cdx = p.position.x - cx
+                    const cdy = p.position.y - cy
+                    const cdz = p.position.z - cz
+                    const distToCamSq = cdx * cdx + cdy * cdy + cdz * cdz
+
                     if (distToCamSq < this.cameraSafeRadiusSq) {
                         const distToCam = Math.sqrt(distToCamSq)
-                        this.tempVec.copy(p.position).sub(cameraPosition).normalize()
-                        p.position.addScaledVector(this.tempVec, CAMERA_SAFE_RADIUS - distToCam)
-                        const dot = p.velocity.dot(this.tempVec)
-                        if (dot < 0) p.velocity.addScaledVector(this.tempVec, -dot * 1.5)
-                        p.velocity.addScaledVector(this.tempVec, 0.05)
+                        const invDist = 1.0 / distToCam
+                        const nx = cdx * invDist
+                        const ny = cdy * invDist
+                        const nz = cdz * invDist
+
+                        const correction = CAMERA_SAFE_RADIUS - distToCam
+                        p.position.x += nx * correction
+                        p.position.y += ny * correction
+                        p.position.z += nz * correction
+
+                        const dot = p.velocity.x * nx + p.velocity.y * ny + p.velocity.z * nz
+                        if (dot < 0) {
+                            p.velocity.x -= nx * dot * 1.5
+                            p.velocity.y -= ny * dot * 1.5
+                            p.velocity.z -= nz * dot * 1.5
+                        }
+                        p.velocity.x += nx * 0.05
+                        p.velocity.y += ny * 0.05
+                        p.velocity.z += nz * 0.05
                     }
                 }
             }
@@ -195,16 +307,26 @@ export class PhysicsSimulator {
                     const p = this.particles[i]
                     for (let j = i + 1; j < this.count; j++) {
                         const p2 = this.particles[j]
-                        const distSq = p.position.distanceToSquared(p2.position)
+
+                        const dx = p.position.x - p2.position.x
+                        const dy = p.position.y - p2.position.y
+                        const dz = p.position.z - p2.position.z
+                        const distSq = dx * dx + dy * dy + dz * dz
+
                         if (distSq > this.MIN_DIST_SQ && distSq < maxRSq) {
                             const dist = Math.sqrt(distSq)
-                            this.tempVec.copy(p.position).sub(p2.position)
-                            this.tempVec.x /= dist
-                            this.tempVec.y /= dist
-                            this.tempVec.z /= dist
+                            const invDist = 1.0 / dist
+                            const nx = dx * invDist
+                            const ny = dy * invDist
+                            const nz = dz * invDist
+
                             const push = force * (1 - dist / maxR)
-                            p.velocity.addScaledVector(this.tempVec, push)
-                            p2.velocity.addScaledVector(this.tempVec, -push)
+                            p.velocity.x += nx * push
+                            p.velocity.y += ny * push
+                            p.velocity.z += nz * push
+                            p2.velocity.x -= nx * push
+                            p2.velocity.y -= ny * push
+                            p2.velocity.z -= nz * push
                         }
                     }
                 }

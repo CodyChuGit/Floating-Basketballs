@@ -8,4 +8,14 @@ export default defineConfig({
     // Allow Netlify deploy preview subdomains (scoped, not blanket allow-all)
     allowedHosts: ['.netlify.app'],
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'three-vendor': ['three', '@react-three/fiber', '@react-three/drei', 'postprocessing', '@react-three/postprocessing']
+        }
+      }
+    }
+  }
 })
