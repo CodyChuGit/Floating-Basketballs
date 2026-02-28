@@ -1,37 +1,17 @@
-# ==============================================================================
-# Netlify Build & Deployment Configuration
-# ==============================================================================
+# netlify.toml — Build config + security headers
 
 [build]
-  # Vite outputs production assets to the "dist" directory
   command = "npm run build"
   publish = "dist"
 
-# ==============================================================================
-# Security Headers
-# Applied to all routes. These harden the deployment against common web attacks
-# even though this is a static client-side app with no backend.
-# ==============================================================================
-
+# Security headers applied to all routes
 [[headers]]
   for = "/*"
   [headers.values]
-    # Content-Security-Policy: Allow local scripts, styles, and data.
-    # 'unsafe-inline' is required for Vite's HMR scripts and our preloader CSS.
-    # ws: and wss: are allowed for HMR WebSockets.
+    # CSP: 'unsafe-inline' required for Vite HMR + preloader CSS; ws/wss for HMR WebSockets
     Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ws: wss:; worker-src 'self' blob:; child-src 'self' blob:"
-
-    # Prevent the site from being embedded in iframes (clickjacking protection)
     X-Frame-Options = "DENY"
-
-    # Prevent MIME-type sniffing (forces browser to respect declared content types)
     X-Content-Type-Options = "nosniff"
-
-    # Controls how much referrer information is sent with outbound requests
     Referrer-Policy = "strict-origin-when-cross-origin"
-
-    # Restricts browser features the page is allowed to use
     Permissions-Policy = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
-
-    # Force HTTPS for all future visits (1 year)
     Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"

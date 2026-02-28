@@ -1,26 +1,8 @@
-/* ============================================================================
- * App.css — Global Styles
- * ============================================================================
- *
- * This stylesheet provides:
- *   1. Light/Dark mode background theming (via CSS media queries)
- *   2. Canvas full-viewport sizing
- *
- * The background colors here MUST match the values used in:
- *   - index.html <meta name="theme-color"> tags
- *   - index.html inline <style> block and #preloader
- *   - ManyBalls.jsx Canvas <color> and container div
- *
- * NOTE: Loading animation styles (bounce, overlay, etc.) are now inlined
- * in index.html so they render before any JS loads.
- *
- * ============================================================================ */
+/* App.css — Global styles
+ * Background colors MUST match: index.html, ManyBalls.jsx Canvas <color>, and <meta theme-color>.
+ * Loading animation styles are inlined in index.html (renders before JS). */
 
-
-/* ------ Light/Dark Mode Background ------ */
-/* These native CSS media queries ensure the background color is correct
-   even BEFORE React hydrates, preventing white flashes on iOS Safari. */
-
+/* Light/dark background — renders before React hydrates (prevents white flash on iOS) */
 html,
 body {
   background-color: #f0f0f0;
@@ -41,10 +23,7 @@ body {
   overflow: hidden;
 }
 
-
-/* ------ Canvas Sizing ------ */
-/* Force the WebGL canvas to fill the full viewport height */
-
+/* Force WebGL canvas to fill viewport */
 canvas {
   height: 100vh !important;
 }

@@ -1,60 +1,72 @@
-# React Floating Basketballs Component
+# React Floating Basketballs
 
-A high-performance interactive 3D website rendering basketballs organically floating in space. 
+An interactive 3D basketball simulation built with React, Three.js, and a custom physics engine. 80 basketballs float, collide, and drift in zero-gravity space with real-time post-processing and OS-native theme integration.
 
-**[View Live Demo](https://wilsonballs.netlify.app)**
+**[Live Demo →](https://wilsonballs.netlify.app)**
 
 ---
 
-## 🏀 The Experience
+## ✨ Highlights
 
-Step into a beautifully rendered, physics-driven 3D environment where dozens of basketballs float, collide, and drift in a zero-gravity space. 
+- **Custom Physics Engine** — Bespoke multi-pass collision solver with soft repulsion auras, iterative constraint solving, and idle-state homogeneous diffusion. Zero external physics dependencies.
+- **Cinematic Post-Processing** — Bloom, film grain noise, vignette, HDRI environment reflections, and soft shadows — all individually toggleable at runtime.
+- **OS Theme Sync** — Automatically follows system light/dark mode. On iOS Safari, CSS gradient edge fades blend the 3D scene seamlessly into browser chrome.
+- **Performance Tiering** — Auto-detects hardware capabilities. Safari gets DPR capping; low-end devices get reduced ball count and stripped effects. Manual override via `?compat` URL param or `M` key.
+- **Memory Managed** — All manually created Three.js geometries, materials, and textures are explicitly `dispose()`d on unmount. Asset caching enabled globally.
 
-We set out to create an experience that feels incredibly tactile, polished, and—most importantly—alive. 
-- **Stunning Visuals:** Utilizing a cinematic post-processing pipeline, the scene features rich Bloom effects, subtle film grain Noise, and Vignetting. A custom procedural sun glow and environmental reflections (HDRI) bring the tactile texture of every Wilson basketball to life.
-- **Bespoke Physics Engine:** Under the hood is a custom-built, multi-pass collision and dynamics engine optimized for smooth interactions. It handles soft repulsive auras, dense cluster collisions, and ambient micro-gravity diffusion, all carefully tuned to maintain 60FPS.
-- **Seamless OS Integration:** Designed mobile-first, the app automatically syncs with your device's native Light or Dark mode. On iOS Safari, we utilize native meta tags and CSS gradient Edge Fades to seamlessly blend the 3D scene directly into the Safari browser chrome, creating the illusion of an infinite, borderless viewport.
+## 🕹️ Controls
 
-## 🕹️ Interactive Controls
+| Input | Action |
+|---|---|
+| **Drag / Swipe** | Orbit camera |
+| **Scroll / Pinch** | Zoom (camera has a physics forcefield — balls dodge you) |
+| **P** | Toggle wireframe diagnostic view |
+| **L** | Toggle light/dark mode (overrides OS) |
+| **M** | Toggle High Performance ↔ High Compatibility mode |
+| **O** | Cycle through disabling effects one by one (Bloom → Noise → Vignette → Shadows → Environment → all back on) |
 
-Take control of the scene with full interactive support:
+## ⚡ Architecture
 
-- **Rotate/Orbit:** Click and drag (or swipe on touch screens) to orbit the camera seamlessly around the floating cluster.
-- **Zoom In/Out:** Scroll the mouse wheel (or pinch to zoom on touch screens) to dive deep into the cluster or pull back for a wide view. *Watch out—the camera features a physics forcefield that pushes basketballs out of the way before you clip through them!*
-- **Diagnostic Wireframe Mode:** Press "**P**" on your keyboard to toggle Primitive/Wireframe view. This reveals the highly optimized rendering skeleton and the exact collision spheres the physics engine uses to calculate bounces. (Wireframe lines automatically adapt to black or white based on your Light/Dark mode).
+```
+index.html          Inline preloader (renders before JS, zero-dependency)
+├── main.jsx        React entry point
+├── ManyBalls.jsx   App component: Canvas, lighting, controls, post-processing, keyboard shortcuts
+├── physics.js      Custom collision engine (O(n²) pair loop, 6-pass iterative solver, idle diffusion)
+├── App.css         Global styles (light/dark background, canvas sizing)
+├── vite.config.js  Build config + Netlify host allowlist
+└── netlify.toml    Security headers (CSP, HSTS, X-Frame-Options, etc.)
+```
 
-## 💡 Performance Features
+### Physics Pipeline (per frame)
+1. **Unified pair loop** — Soft aura repulsion + hard collision in one O(n²) sweep
+2. **Iterative solver** — 6 refinement passes for stability in dense clusters
+3. **Integration** — Velocity damping, speed clamping, position update
+4. **Idle diffusion** — Gentle mutual repulsion when kinetic energy drops, filling the volume evenly
 
-- **Algorithmic Optimizations:** The physics engine uses squared distances (`distanceToSquared()`) and single-pass unified loops to eliminate thousands of costly `Math.sqrt()` operations per frame.
-- **Asset Compression:** All normal maps and roughness maps were optimized to `JPEG` and `.webp` where appropriate, dropping payload sizes by nearly 90% without sacrificing visual fidelity.
-- **Hardware Tiering:** The app detects capabilities instantly on load. Devices without advanced WebGL or specific browsers (like iOS Safari) are funneled into a tailored experience with DPR (Device Pixel Ratio) capping, reduced ball counts, and stripped-down rendering effects to guarantee butter-smooth framerates.
+### Performance Optimizations
+- `distanceToSquared()` for all hot-path checks (sqrt only on confirmed interaction)
+- Precomputed squared thresholds in constructor (not per-frame)
+- Manual vector normalization reusing already-computed distance
+- `InstancedMesh` for 80 balls on a single draw call
+- `THREE.Cache.enabled` + explicit `dispose()` on all GPU resources
+- EffectComposer `multisampling={4}` with native WebGL antialiasing
 
 ## 🛠️ Tech Stack
 
-- **React** + **Vite**
-- **Three.js** + **React Three Fiber**
-- **React Three Drei** (for environment and controls)
-- **React Three Postprocessing** (for cinematic effects)
+- React + Vite
+- Three.js + React Three Fiber + Drei + Postprocessing
+- Netlify (hosting + security headers)
 
-## 🎨 Asset Credits
-
-Special thanks to the 3D asset creator:
-- **Author**: Lassi Kaukonen ([thesidekick](https://sketchfab.com/thesidekick))
-- **License**: [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/)
-- **Source**: [Basketball 3D Model](https://sketchfab.com/3d-models/basketball-8d17cb0964334a6cbe4b0e293c238956)
-- **Title**: Basketball
-
----
-
-## 🚀 Running Locally
+## 🚀 Run Locally
 
 ```bash
-# Install dependencies
 npm install
-
-# Start the dev server
-npm run dev
-
-# Build for production
-npm run build
+npm run dev       # dev server at localhost:5173
+npm run build     # production build → dist/
 ```
+
+## 🎨 Credits
+
+3D basketball model by **Lassi Kaukonen** ([thesidekick](https://sketchfab.com/thesidekick))
+- License: [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/)
+- Source: [Basketball on Sketchfab](https://sketchfab.com/3d-models/basketball-8d17cb0964334a6cbe4b0e293c238956)

@@ -1,20 +1,7 @@
-/**
- * ============================================================================
- * ManyBalls.jsx — Main Application Component
- * ============================================================================
- *
- * The primary React component that orchestrates the entire 3D basketball
- * simulation. It manages:
- *
- *   - Loading screen with animated bouncing ball
- *   - InstancedMesh rendering of 80 basketballs (40 in compat mode)
- *   - Custom physics simulation (see physics.js)
- *   - Post-processing pipeline (Bloom, Noise, Vignette)
- *   - Light/Dark mode detection and seamless Safari iOS integration
- *   - Performance-tiered rendering (High Performance vs High Compatibility)
- *
- * ============================================================================
- */
+// ManyBalls.jsx — Main application component
+// Orchestrates: loading screen, instanced basketball rendering, physics,
+// post-processing (Bloom/Noise/Vignette), light/dark mode, Safari optimization,
+// and keyboard-driven effects cycling.
 
 import { useMemo, Suspense, useRef, useState, useEffect } from 'react'
 import './App.css'
@@ -24,456 +11,246 @@ import { Bloom, Noise, Vignette, EffectComposer } from '@react-three/postprocess
 import * as THREE from 'three'
 import { PhysicsSimulator } from './physics.js'
 
-// Enable Three.js global asset caching to reuse buffers
-THREE.Cache.enabled = true
+THREE.Cache.enabled = true // reuse decoded textures across mounts
 
+// Effects that can be cycled via "O" key (order matters)
+const EFFECT_NAMES = ['Bloom', 'Noise', 'Vignette', 'Shadows', 'Environment']
+const ALL_EFFECTS_ON = { Bloom: true, Noise: true, Vignette: true, Shadows: true, Environment: true }
 
-// ==========================================================================
-// Loader — Bridges the native HTML preloader with React's asset loading
-// ==========================================================================
-
-/**
- * This component does NOT render any visible UI of its own. Instead, it
- * monitors Three.js asset loading progress via useProgress() and controls
- * the native HTML preloader element (#preloader) that is already visible
- * in index.html from the moment the page loads — zero JS dependency.
- *
- * Once all 3D assets are loaded (progress >= 100%), it fades out the
- * HTML preloader and removes it from the DOM after the transition completes.
- */
+// --- Loader ---
+// Bridges the native HTML #preloader (visible before JS loads) with React's
+// asset loading. Fades out and removes the DOM element once assets are ready.
 function Loader() {
   const { progress } = useProgress()
-
   useEffect(() => {
     if (progress >= 100) {
-      const preloader = document.getElementById('preloader')
-      if (!preloader) return
-
-      // Add the CSS fade-out class (1s transition defined in index.html)
-      preloader.classList.add('fade-out')
-
-      // Remove the element from the DOM after the transition finishes
-      const cleanup = setTimeout(() => preloader.remove(), 1200)
-      return () => clearTimeout(cleanup)
+      const el = document.getElementById('preloader')
+      if (!el) return
+      el.classList.add('fade-out')
+      const t = setTimeout(() => el.remove(), 1200)
+      return () => clearTimeout(t)
     }
   }, [progress])
-
-  // This component renders nothing — the preloader lives in index.html
   return null
 }
 
-
-// ==========================================================================
-// Basketballs — Instanced 3D basketball renderer with physics
-// ==========================================================================
-
-/**
- * Renders N basketballs using Three.js InstancedMesh for maximum performance.
- * Each ball's position is driven by the PhysicsSimulator every frame.
- *
- * Two InstancedMeshes are maintained in parallel:
- *   1. Textured mesh — The full basketball with PBR materials
- *   2. Wireframe mesh — A diagnostic view toggled via the "P" key
- *
- * @param {number} count — Number of basketball instances to render.
- * @param {boolean} lowPower — Whether High Compatibility Mode is active.
- * @param {boolean} isPrimitive — Whether wireframe diagnostic view is active.
- * @param {function} setIsPrimitive — State setter for toggling wireframe view.
- */
-function Basketballs({ count = 80, lowPower = false, isPrimitive, isDarkMode }) {
+// --- Basketballs ---
+// Renders N balls via InstancedMesh. Physics drives positions each frame.
+// Two meshes exist in parallel: textured (default) and wireframe (diagnostic "P" key).
+function Basketballs({ count = 80, isPrimitive, isDarkMode }) {
   const { nodes, materials } = useGLTF('/Ball.gltf')
   const { gl } = useThree()
   const meshRef = useRef()
   const primRef = useRef()
 
-  // -----------------------------------------------------------------------
-  // Texture Quality Enhancement
-  // Apply maximum anisotropic filtering to all material texture maps.
-  // This dramatically improves texture clarity at grazing angles and
-  // reduces moiré patterns on the basketball's curved surfaces.
-  // -----------------------------------------------------------------------
+  // Max anisotropic filtering — sharpens textures at oblique angles
   useEffect(() => {
-    Object.values(materials).forEach(material => {
-      if (material.map) material.map.anisotropy = gl.capabilities.getMaxAnisotropy()
-      if (material.normalMap) {
-        material.normalMap.anisotropy = gl.capabilities.getMaxAnisotropy()
-        material.normalScale.set(0.7, 0.7) // Soften specular highlights to prevent shimmering
+    const maxAniso = gl.capabilities.getMaxAnisotropy()
+    Object.values(materials).forEach(mat => {
+      if (mat.map) mat.map.anisotropy = maxAniso
+      if (mat.normalMap) {
+        mat.normalMap.anisotropy = maxAniso
+        mat.normalScale.set(0.7, 0.7) // soften to prevent shimmering
       }
-      if (material.roughnessMap) material.roughnessMap.anisotropy = gl.capabilities.getMaxAnisotropy()
+      if (mat.roughnessMap) mat.roughnessMap.anisotropy = maxAniso
     })
   }, [materials, gl])
 
-  // -----------------------------------------------------------------------
-  // Geometry Centering
-  // Clone the GLTF geometry and re-center it at the origin so that the
-  // physics collision sphere perfectly aligns with the visible mesh.
-  // Without this, bounding box offsets cause balls to "hover" off-center.
-  // -----------------------------------------------------------------------
+  // Center GLTF geometry at origin so physics sphere aligns with mesh
   const centeredGeo = useMemo(() => {
     const geo = nodes.Object_2.geometry.clone()
     geo.computeBoundingSphere()
-    const { center } = geo.boundingSphere
-    geo.translate(-center.x, -center.y, -center.z)
+    const c = geo.boundingSphere.center
+    geo.translate(-c.x, -c.y, -c.z)
     geo.computeBoundingSphere()
     return geo
   }, [nodes])
 
-  // Manually dispose of clones when centeredGeo changes or unmounts
-  useEffect(() => {
-    return () => centeredGeo.dispose()
-  }, [centeredGeo])
+  useEffect(() => () => centeredGeo.dispose(), [centeredGeo])
 
-  const actualRadius = centeredGeo.boundingSphere.radius
-
-  // -----------------------------------------------------------------------
-  // Physics Engine Initialization
-  // Create the simulator once with the correct ball count and radius.
-  // The tempMatrix and localCameraPos are reusable objects to avoid
-  // per-frame garbage collection pressure.
-  // -----------------------------------------------------------------------
-  const physics = useMemo(() => new PhysicsSimulator(count, actualRadius), [count, actualRadius])
+  const radius = centeredGeo.boundingSphere.radius
+  const physics = useMemo(() => new PhysicsSimulator(count, radius), [count, radius])
   const tempMatrix = useMemo(() => new THREE.Matrix4(), [])
-  const localCameraPos = useMemo(() => new THREE.Vector3(), [])
+  const localCamPos = useMemo(() => new THREE.Vector3(), [])
 
-  // -----------------------------------------------------------------------
-  // Per-Frame Physics Update (runs every requestAnimationFrame)
-  // Maps the camera's world position into the InstancedMesh's local space,
-  // then advances the physics simulation and syncs visual transforms.
-  // -----------------------------------------------------------------------
+  // Per-frame: transform camera to local space, step physics, sync instances
   useFrame((state) => {
     if (!meshRef.current && !primRef.current) return
-
-    // Transform camera position from world space to the InstancedMesh's
-    // local space (accounting for the -90° X rotation)
-    localCameraPos.copy(state.camera.position)
-    meshRef.current.worldToLocal(localCameraPos)
-
-    physics.step(localCameraPos)
+    localCamPos.copy(state.camera.position)
+    meshRef.current.worldToLocal(localCamPos)
+    physics.step(localCamPos)
     physics.updateInstances(meshRef, primRef, tempMatrix)
   })
 
-  // Wireframe diagnostic geometry — matches the collision sphere size exactly
-  const primitiveGeo = useMemo(() => {
-    const r = centeredGeo.boundingSphere.radius
-    return new THREE.SphereGeometry(r, 12, 12)
-  }, [centeredGeo])
+  // Wireframe diagnostic sphere (matches collision radius exactly)
+  const primGeo = useMemo(() => new THREE.SphereGeometry(radius, 12, 12), [radius])
+  const primMat = useMemo(() => new THREE.MeshBasicMaterial({
+    color: isDarkMode ? '#fff' : '#000', wireframe: true, transparent: true, opacity: 0.8,
+  }), [isDarkMode])
 
-  const primitiveMat = useMemo(() => {
-    return new THREE.MeshBasicMaterial({
-      color: isDarkMode ? '#ffffff' : '#000000',
-      wireframe: true,
-      transparent: true,
-      opacity: 0.8
-    })
-  }, [isDarkMode])
-
-  // Ensure diagnostic objects are disposed from GPU memory
-  useEffect(() => {
-    return () => {
-      primitiveGeo.dispose()
-      primitiveMat.dispose()
-    }
-  }, [primitiveGeo, primitiveMat])
+  useEffect(() => () => { primGeo.dispose(); primMat.dispose() }, [primGeo, primMat])
 
   return (
     <>
-      {/* Primary textured basketball instances */}
-      <instancedMesh castShadow receiveShadow visible={!isPrimitive} ref={meshRef} args={[centeredGeo, materials.Basketball_size6, count]} rotation={[-Math.PI / 2, 0, 0]} />
-      {/* Wireframe diagnostic instances (toggled via "P" key) */}
-      <instancedMesh castShadow receiveShadow visible={isPrimitive} ref={primRef} args={[primitiveGeo, primitiveMat, count]} rotation={[-Math.PI / 2, 0, 0]} />
+      <instancedMesh castShadow receiveShadow visible={!isPrimitive} ref={meshRef}
+        args={[centeredGeo, materials.Basketball_size6, count]} rotation={[-Math.PI / 2, 0, 0]} />
+      <instancedMesh castShadow receiveShadow visible={isPrimitive} ref={primRef}
+        args={[primGeo, primMat, count]} rotation={[-Math.PI / 2, 0, 0]} />
     </>
   )
 }
 
-
-// ==========================================================================
-// App — Root application component
-// ==========================================================================
-
+// --- App ---
 function App() {
   const sunRef = useRef()
 
-  // -----------------------------------------------------------------------
-  // Performance Mode Detection
-  // Automatically enables High Compatibility Mode if:
-  //   - The URL contains "?compat" (manual override)
-  //   - WebGL is not available in the browser
-  // -----------------------------------------------------------------------
-  const [isLowPower, setIsLowPower] = useState(() => {
-    return window.location.search.includes('compat') || !window.WebGLRenderingContext
-  })
+  // Performance mode: auto-detect or manual ?compat override
+  const [isLowPower, setIsLowPower] = useState(() =>
+    window.location.search.includes('compat') || !window.WebGLRenderingContext
+  )
 
-  // -----------------------------------------------------------------------
-  // Browser Detection
-  // Safari requires specific DPR capping and feature stripping for
-  // acceptable framerates on Retina displays.
-  // -----------------------------------------------------------------------
+  // Browser detection (Safari needs DPR cap; iOS needs edge fades)
   const isSafari = useMemo(() => {
     const ua = navigator.userAgent
     return ua.includes('Safari') && !ua.includes('Chrome') && !ua.includes('Chromium')
   }, [])
-
-  // -----------------------------------------------------------------------
-  // iOS Detection
-  // Used to conditionally render CSS edge gradients that blend
-  // the 3D scene into the Safari browser chrome (top/bottom bars).
-  // -----------------------------------------------------------------------
   const isIOS = useMemo(() => {
     const ua = navigator.userAgent
-    return /iPad|iPhone|iPod/.test(ua) || (ua.includes("Mac") && "ontouchend" in document)
+    return /iPad|iPhone|iPod/.test(ua) || (ua.includes('Mac') && 'ontouchend' in document)
   }, [])
 
-  // -----------------------------------------------------------------------
-  // Wireframe Diagnostic Mode
-  // Defaults to wireframe in Low Power mode for visual clarity.
-  // -----------------------------------------------------------------------
   const [isPrimitive, setIsPrimitive] = useState(isLowPower)
 
-  // -----------------------------------------------------------------------
-  // Effects Toggle State
-  // Each effect can be individually disabled via the "O" key cycling.
-  // The cycle order: Bloom → Noise → Vignette → Shadows → Environment → all back on.
-  // -----------------------------------------------------------------------
-  const EFFECT_NAMES = ['Bloom', 'Noise', 'Vignette', 'Shadows', 'Environment']
-  const [effects, setEffects] = useState({
-    Bloom: true,
-    Noise: true,
-    Vignette: true,
-    Shadows: true,
-    Environment: true,
-  })
-  const [effectCycleIndex, setEffectCycleIndex] = useState(0)
-  // Track whether the effects HUD should be visible
+  // Effects state — each toggleable via "O" key cycling
+  const [effects, setEffects] = useState(ALL_EFFECTS_ON)
+  const [effectIdx, setEffectIdx] = useState(0)
   const [showEffectsHUD, setShowEffectsHUD] = useState(false)
 
-  // -----------------------------------------------------------------------
-  // Light/Dark Mode Detection
-  // Listens to the OS-level "prefers-color-scheme" media query and
-  // hot-swaps the theme in real time if the user changes system settings.
-  // -----------------------------------------------------------------------
+  // Theme — follows OS preference unless user presses "L" to override
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window !== 'undefined' && window.matchMedia) {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches
-    }
+    if (window.matchMedia) return window.matchMedia('(prefers-color-scheme: dark)').matches
     return true
   })
-
-  // Track whether the user has manually overridden the theme via "L" key.
-  // When overridden, we stop listening to OS-level theme changes.
-  const [themeOverridden, setThemeOverridden] = useState(false)
+  const [themeOverride, setThemeOverride] = useState(false)
 
   useEffect(() => {
-    if (themeOverridden) return // User has manually set the theme, ignore OS changes
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const handleChange = (e) => setIsDarkMode(e.matches)
-    if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener('change', handleChange)
-      return () => mediaQuery.removeEventListener('change', handleChange)
-    } else {
-      mediaQuery.addListener(handleChange)
-      return () => mediaQuery.removeListener(handleChange)
-    }
-  }, [themeOverridden])
+    if (themeOverride) return
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = (e) => setIsDarkMode(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [themeOverride])
 
-  // -----------------------------------------------------------------------
-  // Keyboard Shortcuts (App-level)
-  // "L" — Toggle Light/Dark mode (manual override)
-  // "M" — Cycle display modes (High Performance ↔ High Compatibility)
-  // "P" — Toggle wireframe diagnostic view
-  // "O" — Cycle through disabling effects one by one, then re-enable all
-  // -----------------------------------------------------------------------
+  // Keyboard shortcuts: L=theme, M=mode, P=wireframe, O=effects cycle
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      const key = e.key.toLowerCase()
-      if (key === 'l') {
-        setIsDarkMode(prev => !prev)
-        setThemeOverridden(true)
-      } else if (key === 'm') {
-        setIsLowPower(prev => !prev)
-      } else if (key === 'p') {
-        setIsPrimitive(prev => !prev)
-      } else if (key === 'o') {
+    const onKey = (e) => {
+      const k = e.key.toLowerCase()
+      if (k === 'l') { setIsDarkMode(v => !v); setThemeOverride(true) }
+      else if (k === 'm') setIsLowPower(v => !v)
+      else if (k === 'p') setIsPrimitive(v => !v)
+      else if (k === 'o') {
         setShowEffectsHUD(true)
-        setEffectCycleIndex(prev => {
+        setEffectIdx(prev => {
           const next = prev + 1
           if (next > EFFECT_NAMES.length) {
-            // All effects have been turned off, re-enable all
-            setEffects({ Bloom: true, Noise: true, Vignette: true, Shadows: true, Environment: true })
+            setEffects(ALL_EFFECTS_ON)
             setShowEffectsHUD(false)
             return 0
-          } else {
-            // Turn off the next effect in the cycle
-            const effectToDisable = EFFECT_NAMES[next - 1]
-            setEffects(prev => ({ ...prev, [effectToDisable]: false }))
-            return next
           }
+          setEffects(cur => ({ ...cur, [EFFECT_NAMES[next - 1]]: false }))
+          return next
         })
       }
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // -----------------------------------------------------------------------
-  // Procedural Sun Glow Texture
-  // Generates a radial gradient on an off-screen canvas to create a soft,
-  // warm glow effect around the sun. Uses Canvas2D instead of loading an
-  // image file, keeping the asset payload minimal.
-  // -----------------------------------------------------------------------
+  // Procedural sun glow — 256×256 radial gradient canvas texture
   const glowTexture = useMemo(() => {
-    const canvas = document.createElement('canvas')
-    canvas.width = 256
-    canvas.height = 256
-    const context = canvas.getContext('2d')
-    const gradient = context.createRadialGradient(128, 128, 0, 128, 128, 128)
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 1)')
-    gradient.addColorStop(0.1, 'rgba(255, 240, 200, 0.9)')
-    gradient.addColorStop(0.4, 'rgba(255, 180, 100, 0.4)')
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')
-    context.fillStyle = gradient
-    context.fillRect(0, 0, 256, 256)
-    return new THREE.CanvasTexture(canvas)
+    const c = document.createElement('canvas')
+    c.width = c.height = 256
+    const ctx = c.getContext('2d')
+    const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128)
+    g.addColorStop(0, 'rgba(255,255,255,1)')
+    g.addColorStop(0.1, 'rgba(255,240,200,0.9)')
+    g.addColorStop(0.4, 'rgba(255,180,100,0.4)')
+    g.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, 256, 256)
+    return new THREE.CanvasTexture(c)
   }, [])
 
-  // Explicitly dispose of generated glow texture on unmount
-  useEffect(() => {
-    return () => glowTexture.dispose()
-  }, [glowTexture])
+  useEffect(() => () => glowTexture.dispose(), [glowTexture])
 
-  // =========================================================================
-  // RENDER
-  // =========================================================================
+  const bg = isDarkMode ? '#020202' : '#f0f0f0'
+
   return (
-    <div style={{ width: '100vw', height: '100vh', background: isDarkMode ? '#020202' : '#f0f0f0', position: 'relative', overflow: 'hidden' }}>
-
-      {/* Loading Screen — Fades out once all 3D assets are downloaded */}
+    <div style={{ width: '100vw', height: '100vh', background: bg, position: 'relative', overflow: 'hidden' }}>
       <Loader />
 
-      {/* ----------------------------------------------------------------- */}
-      {/* iOS Safari Edge Fades                                             */}
-      {/* Two CSS linear-gradient overlays (top + bottom) that blend the    */}
-      {/* 3D scene into Safari's browser chrome, creating a seamless        */}
-      {/* "infinite screen" effect. Only rendered on iOS devices.           */}
-      {/* ----------------------------------------------------------------- */}
+      {/* iOS Safari edge fades — blend scene into browser chrome */}
       {isIOS && (
         <>
           <div style={{
-            position: 'absolute', top: 0, left: 0, width: '100%', height: '10vh', pointerEvents: 'none', zIndex: 1,
-            background: `linear-gradient(to bottom, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
+            position: 'absolute', top: 0, left: 0, width: '100%', height: '10vh',
+            pointerEvents: 'none', zIndex: 1, background: `linear-gradient(to bottom, ${bg}, transparent)`
           }} />
           <div style={{
-            position: 'absolute', bottom: 0, left: 0, width: '100%', height: '10vh', pointerEvents: 'none', zIndex: 1,
-            background: `linear-gradient(to top, ${isDarkMode ? '#020202' : '#f0f0f0'}, transparent)`
+            position: 'absolute', bottom: 0, left: 0, width: '100%', height: '10vh',
+            pointerEvents: 'none', zIndex: 1, background: `linear-gradient(to top, ${bg}, transparent)`
           }} />
         </>
       )}
 
-      {/* ----------------------------------------------------------------- */}
-      {/* Three.js Canvas                                                   */}
-      {/* DPR is capped to 1.0 on Safari to prevent Retina fragment shader  */}
-      {/* overload, and 1.5 elsewhere for crisp visuals without 4K cost.    */}
-      {/* ----------------------------------------------------------------- */}
+      {/* Three.js Canvas — DPR capped to 1.0 on Safari (Retina perf), 1.5 elsewhere */}
       <Canvas
         dpr={[1, isSafari ? 1.0 : 1.5]}
-        shadows={effects.Shadows ? "soft" : false}
+        shadows={effects.Shadows ? 'soft' : false}
         camera={{ position: [0, 20, 90], fov: 45 }}
         gl={{
-          antialias: true,
-          powerPreference: isLowPower ? "low-power" : "high-performance",
-          preserveDrawingBuffer: false,
-          stencil: false,
-          depth: true
-        }}
-        onCreated={({ gl }) => {
-          // Monitor rendering stats and GPU info
-          console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-          console.log("🎨 Renderer Initialized")
-          console.log("Memory info:", gl.info.memory)
-          console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+          antialias: true, powerPreference: isLowPower ? 'low-power' : 'high-performance',
+          preserveDrawingBuffer: false, stencil: false, depth: true
         }}
       >
-        {/* Canvas clear color — matches the HTML background for seamlessness */}
-        <color attach="background" args={[isDarkMode ? '#020202' : '#f0f0f0']} />
+        <color attach="background" args={[bg]} />
 
-        {/* ----- Lighting Rig ----- */}
-
-        {/* Ambient fill light — very faint in High Performance, brighter in Compat */}
+        {/* Lighting rig */}
         <ambientLight intensity={isLowPower ? 0.8 : 0.01} />
-
-        {/* Primary directional light — acts as the "sun" for shadows and highlights */}
-        <directionalLight
-          position={[50, 100, 50]}
-          intensity={isLowPower ? 0.4 : 1.0}
+        <directionalLight position={[50, 100, 50]} intensity={isLowPower ? 0.4 : 1.0}
           castShadow={!isLowPower && effects.Shadows}
-          shadow-mapSize={[1024, 1024]}
-          shadow-camera-left={-70}
-          shadow-camera-right={70}
-          shadow-camera-top={70}
-          shadow-camera-bottom={-70}
-          shadow-bias={-0.001}
-        />
+          shadow-mapSize={[1024, 1024]} shadow-camera-left={-70} shadow-camera-right={70}
+          shadow-camera-top={70} shadow-camera-bottom={-70} shadow-bias={-0.001} />
 
-        {/* Visual Sun and Glow Sprite — positioned at the directional light source */}
+        {/* Sun mesh + additive glow sprite */}
         <group position={[50, 100, 50]}>
           <mesh ref={sunRef}>
             <sphereGeometry args={[5, isLowPower ? 8 : 16, isLowPower ? 8 : 16]} />
-            {isLowPower ? (
-              <meshBasicMaterial color="#ffffff" />
-            ) : (
-              <meshStandardMaterial
-                color="#ffffff"
-                emissive="#fff9e6"
-                emissiveIntensity={17}
-                toneMapped={false}
-              />
-            )}
+            {isLowPower
+              ? <meshBasicMaterial color="#ffffff" />
+              : <meshStandardMaterial color="#ffffff" emissive="#fff9e6" emissiveIntensity={17} toneMapped={false} />
+            }
           </mesh>
-          {/* Additive-blended glow sprite — creates a soft halo around the sun */}
           {!isLowPower && (
             <sprite scale={[70, 70, 1]}>
-              <spriteMaterial
-                map={glowTexture}
-                blending={THREE.AdditiveBlending}
-                depthWrite={false}
-                transparent={true}
-              />
+              <spriteMaterial map={glowTexture} blending={THREE.AdditiveBlending} depthWrite={false} transparent />
             </sprite>
           )}
         </group>
 
-        {/* Back-fill point light — subtle rim lighting from the opposite direction */}
         <pointLight position={[-40, -40, -40]} intensity={0.12} color="#ffffff" />
-        {/* Secondary accent light — warm tint for visual depth */}
         {!isLowPower && <pointLight position={[40, 40, 80]} intensity={0.04} color="#ffeedd" />}
 
-        {/* ----- Camera Controls ----- */}
-        <OrbitControls
-          enableZoom={true}
-          zoomSpeed={0.3}
-          enablePan={false}
-          enableRotate={true}
-          rotateSpeed={0.3}
-          autoRotate={true}
-          autoRotateSpeed={-0.64}
-          minDistance={35}
-          maxDistance={63}
-        />
+        {/* Camera controls */}
+        <OrbitControls enableZoom zoomSpeed={0.3} enablePan={false} enableRotate
+          rotateSpeed={0.3} autoRotate autoRotateSpeed={-0.64} minDistance={35} maxDistance={63} />
 
-        {/* ----- Scene Content ----- */}
         <Suspense fallback={null}>
-          <Basketballs
-            count={isLowPower ? 40 : 80}
-            lowPower={isLowPower}
-            isPrimitive={isPrimitive}
-            isDarkMode={isDarkMode}
-          />
-          {/* HDR Environment Map — provides realistic reflections on ball surfaces */}
+          <Basketballs count={isLowPower ? 40 : 80} isPrimitive={isPrimitive} isDarkMode={isDarkMode} />
           {!isLowPower && effects.Environment && <Environment preset="city" blur={0.5} />}
         </Suspense>
 
-        {/* ----- Post-Processing Pipeline ----- */}
-        {/* Only active in High Performance mode; stripped entirely in Compat mode */}
-        {/* Individual effects can be toggled via the "O" key */}
+        {/* Post-processing — only in high-perf mode, each effect individually toggleable */}
         {!isLowPower && (effects.Bloom || effects.Noise || effects.Vignette) && (
           <EffectComposer disableNormalPass multisampling={4}>
             {effects.Bloom && <Bloom luminanceThreshold={1.2} mipmapBlur intensity={0.85} radius={0.5} />}
@@ -483,26 +260,26 @@ function App() {
         )}
       </Canvas>
 
-      {/* ----- Effects HUD (top-right, visible when cycling effects via "O") ----- */}
+      {/* Effects HUD — visible when cycling with "O" */}
       {showEffectsHUD && !isLowPower && (
         <div style={{
           position: 'absolute', top: 20, right: 20,
           color: isDarkMode ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
           pointerEvents: 'none', fontSize: '11px', zIndex: 10,
-          fontFamily: 'monospace', lineHeight: 1.8, textAlign: 'left'
+          fontFamily: 'monospace', lineHeight: 1.8
         }}>
-          {EFFECT_NAMES.map(name => (
-            <div key={name}>
-              {effects[name] ? '☑' : '☐'} {name}
-            </div>
-          ))}
+          {EFFECT_NAMES.map(n => <div key={n}>{effects[n] ? '☑' : '☐'} {n}</div>)}
           <div style={{ marginTop: 4, opacity: 0.4, fontSize: '9px' }}>[O] cycle effects</div>
         </div>
       )}
 
-      {/* ----- Diagnostic Mode Label & Keyboard Shortcuts ----- */}
+      {/* Diagnostic label (wireframe mode only) */}
       {isPrimitive && (
-        <div style={{ position: 'absolute', bottom: 20, right: 20, color: isDarkMode ? 'white' : 'black', opacity: 0.3, pointerEvents: 'none', fontSize: '10px', zIndex: 10, textAlign: 'right', lineHeight: 1.6 }}>
+        <div style={{
+          position: 'absolute', bottom: 20, right: 20, color: isDarkMode ? '#fff' : '#000',
+          opacity: 0.3, pointerEvents: 'none', fontSize: '10px', zIndex: 10,
+          textAlign: 'right', lineHeight: 1.6
+        }}>
           {isLowPower ? 'High Compatibility Mode' : 'High Performance Mode'}<br />
           [L] Theme · [M] Mode · [P] Wireframe · [O] Effects
         </div>
