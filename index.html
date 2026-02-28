@@ -3,14 +3,34 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/png" href="/loading-ball.png" />
+  <link rel="icon" type="image/webp" href="/loading-ball.webp" />
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="color-scheme" content="light dark" />
-  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f0f0f0" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#020202" media="(prefers-color-scheme: dark)" />
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+
+    html,
+    body {
+      background: #f0f0f0;
+      margin: 0;
+      padding: 0;
+    }
+
+    @media (prefers-color-scheme: dark) {
+
+      html,
+      body {
+        background: #020202;
+      }
+    }
+  </style>
   <title>Wilson Ball</title>
 </head>
 

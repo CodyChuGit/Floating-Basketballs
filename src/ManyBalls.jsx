@@ -129,19 +129,8 @@ function App() {
   })
 
   useEffect(() => {
-    const updateThemeColor = (isDark) => {
-      const color = isDark ? '#020202' : '#f0f0f0'
-      document.documentElement.style.setProperty('--dynamic-bg', color)
-    }
-
-    updateThemeColor(isDarkMode)
-
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const handleChange = (e) => {
-      setIsDarkMode(e.matches)
-      updateThemeColor(e.matches)
-    }
-
+    const handleChange = (e) => setIsDarkMode(e.matches)
     if (mediaQuery.addEventListener) {
       mediaQuery.addEventListener('change', handleChange)
       return () => mediaQuery.removeEventListener('change', handleChange)
@@ -149,7 +138,7 @@ function App() {
       mediaQuery.addListener(handleChange)
       return () => mediaQuery.removeListener(handleChange)
     }
-  }, [isDarkMode])
+  }, [])
 
   // Procedural gradient glow for the sun
   const glowTexture = useMemo(() => {
