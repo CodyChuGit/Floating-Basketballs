@@ -18,7 +18,7 @@ The project consists of exactly 6 files:
 1. `index.html`: Entry point, meta tags, and pure CSS preloader.
 2. `src/main.jsx`: Standard React strict-mode root.
 3. `src/App.css`: Minimal global styles (light/dark mode background, 100vh canvas).
-4. `src/ManyBalls.jsx`: Main application orchestrating canvas, state, lighting, effects, and instanced mesh rendering.
+4. `src/App.jsx`: Main application orchestrating canvas, state, lighting, effects, and instanced mesh rendering.
 5. `src/physics.js`: Pure JavaScript bespoke physics simulation class.
 6. `vite.config.js`: Vite build configuration + Netlify host rules.
 
@@ -34,7 +34,7 @@ The `App` component acts as the root orchestrator. It manages the following stat
     - `isSafari`: Caps Canvas `dpr` to `1.0` (instead of `1.5`) due to Safari Retina fragment shader throttling.
     - `isIOS`: Renders top/bottom CSS `linear-gradient` overlays matching the background color to blend the Canvas into Safari's browser chrome.
 
-## 4. Canvas & Rendering (`ManyBalls.jsx`)
+## 4. Canvas & Rendering (`App.jsx`)
 
 The `<Canvas>` setup utilizes strict WebGL parameters to optimize memory:
 - `gl={{ antialias: true, powerPreference: isLowPower ? 'low-power' : 'high-performance', preserveDrawingBuffer: false, stencil: false, depth: true }}`

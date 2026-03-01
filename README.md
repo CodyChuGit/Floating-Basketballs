@@ -30,7 +30,7 @@ An interactive 3D basketball simulation built with React, Three.js, and a custom
 ```
 index.html          Inline preloader (renders before JS, zero-dependency)
 ├── main.jsx        React entry point
-├── ManyBalls.jsx   App component: Canvas, lighting, controls, post-processing, keyboard shortcuts
+├── App.jsx   App component: Canvas, lighting, controls, post-processing, keyboard shortcuts
 ├── physics.js      Custom collision engine (O(n²) pair loop, 6-pass iterative solver, idle diffusion)
 ├── App.css         Global styles (light/dark background, canvas sizing)
 ├── vite.config.js  Build config + Netlify host allowlist
