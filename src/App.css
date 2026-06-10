@@ -28,15 +28,6 @@ canvas {
   height: 100vh !important;
 }
 
-body.force-light {
-  background: #ffffff;
-  color: #111111;
-}
-
-body.force-light canvas {
-  background: #ffffff;
-}
-
 body.embed-mode {
   width: 100vw;
   height: 100vh;

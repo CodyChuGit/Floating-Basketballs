@@ -118,7 +118,6 @@ function UnsupportedScreen() {
 function App() {
 
   useEffect(() => {
-    if (FORCE_LIGHT) document.body.classList.add('force-light')
     if (IS_EMBED) document.body.classList.add('embed-mode')
   }, [])
 
@@ -235,7 +234,7 @@ function App() {
 
   useEffect(() => () => glowMaterial.dispose(), [glowMaterial])
 
-  const bg = FORCE_LIGHT ? '#ffffff' : (isDarkMode ? '#020202' : '#f0f0f0')
+  const bg = isDarkMode ? '#020202' : (FORCE_LIGHT ? '#ffffff' : '#f0f0f0')
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: bg, position: 'relative', overflow: 'hidden' }}>
