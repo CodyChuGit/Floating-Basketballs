@@ -61,6 +61,13 @@
       pointer-events: none;
     }
 
+    /* Override for URL forced light mode */
+    html.force-light,
+    html.force-light body,
+    html.force-light #preloader {
+      background: #ffffff !important;
+    }
+
     @keyframes bounce {
 
       0%,
@@ -80,6 +87,13 @@
       filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.5));
     }
   </style>
+
+  <script>
+    // Execute instantly to prevent dark mode flash on preloader
+    if (window.location.search.includes('theme=light')) {
+      document.documentElement.classList.add('force-light');
+    }
+  </script>
 
   <!-- Open Graph / Social Media Preview -->
   <meta property="og:type" content="website" />
