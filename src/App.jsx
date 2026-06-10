@@ -241,7 +241,7 @@ function App() {
       <Loader />
 
       {/* iOS Safari edge fades — blend scene into browser chrome */}
-      {isIOS && (
+      {isIOS && !IS_EMBED && (
         <>
           <div style={{
             position: 'absolute', top: 0, left: 0, width: '100%', height: '10vh',

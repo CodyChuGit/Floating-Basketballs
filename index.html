@@ -78,11 +78,43 @@
       }
     }
 
+    .loader-container {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
     #preloader img {
       width: 100px;
       height: 100px;
       animation: bounce 1.2s ease-in-out infinite;
-      filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.5));
+      position: relative;
+      z-index: 2;
+    }
+
+    @keyframes shadow-pulse {
+      0%,
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(0.6);
+        opacity: 0.5;
+      }
+    }
+
+    .loader-shadow {
+      position: absolute;
+      bottom: -10px;
+      width: 60px;
+      height: 12px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 50%;
+      filter: blur(3px);
+      z-index: 1;
+      animation: shadow-pulse 1.2s ease-in-out infinite;
     }
   </style>
 
@@ -113,7 +145,10 @@
 <body>
   <!-- Inline preloader: visible INSTANTLY, before any JS loads -->
   <div id="preloader">
-    <img src="/loading-ball.webp" alt="Loading..." />
+    <div class="loader-container">
+      <img src="/loading-ball.webp" alt="Loading..." />
+      <div class="loader-shadow"></div>
+    </div>
   </div>
 
   <div id="root"></div>
