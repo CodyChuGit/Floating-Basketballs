@@ -11,6 +11,11 @@ import { Bloom, Noise, Vignette, EffectComposer } from '@react-three/postprocess
 import * as THREE from 'three'
 import { PhysicsSimulator } from './physics.js'
 
+const params = new URLSearchParams(window.location.search)
+export const IS_EMBED = params.get('embed') === 'true'
+export const FORCE_LIGHT = params.get('theme') === 'light'
+export const SKIP_OS_CHECK = params.get('skipOSCheck') === 'true'
+
 THREE.Cache.enabled = true // reuse decoded textures across mounts
 
 // Effects that can be cycled via "O" key (order matters)
@@ -101,8 +106,21 @@ function Basketballs({ count = 80, isPrimitive, isDarkMode, isLowPower }) {
   )
 }
 
+function UnsupportedScreen() {
+  return (
+    <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f0f0', color: '#111', fontFamily: 'sans-serif', padding: 20, textAlign: 'center' }}>
+      <h2>Your device or browser is not supported.</h2>
+    </div>
+  )
+}
+
 // --- App ---
 function App() {
+
+  useEffect(() => {
+    if (FORCE_LIGHT) document.body.classList.add('force-light')
+    if (IS_EMBED) document.body.classList.add('embed-mode')
+  }, [])
 
   // Performance mode: auto-detect or manual ?compat override
   const [isLowPower, setIsLowPower] = useState(() =>
@@ -119,6 +137,12 @@ function App() {
     return /iPad|iPhone|iPod/.test(ua) || (ua.includes('Mac') && 'ontouchend' in document)
   }, [])
 
+  const isUnsupportedOS = !window.WebGLRenderingContext
+
+  if (!SKIP_OS_CHECK && isUnsupportedOS) {
+    return <UnsupportedScreen />
+  }
+
   const [isPrimitive, setIsPrimitive] = useState(isLowPower)
 
   // Effects state — each toggleable via "O" key cycling
@@ -128,6 +152,7 @@ function App() {
 
   // Theme — follows OS preference unless user presses "L" to override
   const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (FORCE_LIGHT) return false
     if (window.matchMedia) return window.matchMedia('(prefers-color-scheme: dark)').matches
     return true
   })
@@ -210,7 +235,7 @@ function App() {
 
   useEffect(() => () => glowMaterial.dispose(), [glowMaterial])
 
-  const bg = isDarkMode ? '#020202' : '#f0f0f0'
+  const bg = FORCE_LIGHT ? '#ffffff' : (isDarkMode ? '#020202' : '#f0f0f0')
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: bg, position: 'relative', overflow: 'hidden' }}>

@@ -9,8 +9,7 @@
   for = "/*"
   [headers.values]
     # CSP: 'unsafe-inline' required for Vite HMR + preloader CSS; ws/wss for HMR WebSockets
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ws: wss:; worker-src 'self' blob:; child-src 'self' blob:"
-    X-Frame-Options = "DENY"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ws: wss:; worker-src 'self' blob:; child-src 'self' blob:; frame-ancestors 'self' https://*.squarespace.com https://*.sqspcdn.com https://*.squarespace-cdn.com https://*.codychu.com https://www.codychu.com;"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
